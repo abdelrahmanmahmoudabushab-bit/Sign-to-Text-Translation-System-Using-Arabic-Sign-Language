@@ -82,16 +82,11 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
     """Run model prediction on preprocessed keypoint data and return Arabic label.
     Runs CNN-LSTM and Qwen2-VL in parallel. If they match, returns consensus.
     If they mismatch, invokes the Judge LLM to debate and decide.
-
-    Args:
-        x: numpy array of shape (1, N_FRAMES, N_KEYPOINTS).
-        video_path: Path to the uploaded video file.
-        history: List of previously translated words in the current session.
-        dialect: Selected sign language dialect name.
-
-    Returns:
-        Predicted Arabic word string, or an error message if model is unavailable.
     """
+    import time
+    from app.telemetry import log_inference_event
+
+    start_t = time.time()
     _init()
 
     if _model is None:
@@ -122,7 +117,19 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
 
     # If no video path is provided, run only the local LSTM path
     if not video_path:
+        latency_ms = (time.time() - start_t) * 1000
         logger.info("Direct LSTM prediction (no video path): %s (confidence %d%%)", pred_lstm, int(lstm_confidence * 100))
+        log_inference_event(
+            lstm_pred=pred_lstm,
+            lstm_conf=lstm_confidence,
+            vlm_pred=None,
+            final_pred=pred_lstm,
+            decision_type="lstm_only",
+            reasoning="Direct landmark sequence without video grid",
+            dialect=dialect,
+            latency_ms=latency_ms,
+            has_video=False
+        )
         return pred_lstm
 
     # 2. Run the VLM path in parallel (VLM calls Ollama API in the background)
@@ -144,8 +151,21 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
     # Wait for the VLM thread to complete (limit to 15 seconds)
     vlm_thread.join(timeout=15.0)
 
+    latency_ms = (time.time() - start_t) * 1000
+
     if not vlm_result:
         logger.warning("VLM parallel check timed out. Defaulting to LSTM prediction.")
+        log_inference_event(
+            lstm_pred=pred_lstm,
+            lstm_conf=lstm_confidence,
+            vlm_pred=None,
+            final_pred=pred_lstm,
+            decision_type="fallback",
+            reasoning="VLM check timed out; defaulted to top LSTM candidate",
+            dialect=dialect,
+            latency_ms=latency_ms,
+            has_video=True
+        )
         return pred_lstm
 
     pred_vlm = vlm_result[0]
@@ -153,6 +173,17 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
     # 3. Consensus Check
     if pred_lstm == pred_vlm:
         logger.info("Consensus reached: both models predict '%s'.", pred_lstm)
+        log_inference_event(
+            lstm_pred=pred_lstm,
+            lstm_conf=lstm_confidence,
+            vlm_pred=pred_vlm,
+            final_pred=pred_lstm,
+            decision_type="consensus",
+            reasoning="Both CNN-LSTM and Qwen2-VL agreed on the gesture",
+            dialect=dialect,
+            latency_ms=latency_ms,
+            has_video=True
+        )
         return pred_lstm
 
     # 4. Disagreement: Debate and Decide via Judge LLM
@@ -160,7 +191,20 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
                 pred_lstm, int(lstm_confidence * 100), pred_vlm)
     
     final_word = debate_and_decide(pred_lstm, lstm_confidence, pred_vlm, history, dialect)
+    latency_ms = (time.time() - start_t) * 1000
+
     logger.info("Debate resolved. Final selected word: '%s'", final_word)
+    log_inference_event(
+        lstm_pred=pred_lstm,
+        lstm_conf=lstm_confidence,
+        vlm_pred=pred_vlm,
+        final_pred=final_word,
+        decision_type="judge",
+        reasoning=f"Judge LLM selected '{final_word}' based on semantic flow and visual evidence",
+        dialect=dialect,
+        latency_ms=latency_ms,
+        has_video=True
+    )
     
     return final_word
 

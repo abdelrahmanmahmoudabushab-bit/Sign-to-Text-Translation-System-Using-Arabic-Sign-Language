@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signo — Live Telemetry & Control Center</title>
+    
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg: #090d16;
+            --surface: rgba(17, 24, 39, 0.75);
+            --surface-hover: rgba(31, 41, 55, 0.85);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(56, 189, 248, 0.3);
+            
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            
+            --cyan: #38bdf8;
+            --purple: #c084fc;
+            --emerald: #34d399;
+            --amber: #fbbf24;
+            --rose: #f43f5e;
+            
+            --gradient-primary: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+            --gradient-card: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.005) 100%);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(192, 132, 252, 0.08) 0%, transparent 40%);
+            background-attachment: fixed;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* ─── Header ────────────────────────────────────────────── */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 18px 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            background: var(--gradient-primary);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+        }
+
+        .brand-text h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-text p {
+            font-size: 0.8rem;
+            color: var(--text-sub);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(52, 211, 153, 0.1);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+            color: var(--emerald);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--emerald);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--emerald);
+            animation: pulse-dot 1.8s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .btn-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.25s ease;
+        }
+
+        .btn-nav:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--cyan);
+            color: var(--cyan);
+            transform: translateY(-1px);
+        }
+
+        /* ─── Grid Section ───────────────────────────────────────── */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 22px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s ease, transform 0.3s ease;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--gradient-card);
+        }
+
+        .card:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-sub);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-icon {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+
+        .card-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-main);
+            line-height: 1.1;
+        }
+
+        .card-subtext {
+            font-size: 0.78rem;
+            color: var(--text-sub);
+            margin-top: 6px;
+        }
+
+        /* Progress Meters */
+        .progress-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.6s ease;
+        }
+
+        .fill-cyan { background: linear-gradient(90deg, #38bdf8, #818cf8); }
+        .fill-emerald { background: linear-gradient(90deg, #34d399, #10b981); }
+        .fill-amber { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+        .fill-purple { background: linear-gradient(90deg, #c084fc, #a855f7); }
+
+        /* ─── Topology Architecture Diagram ──────────────────────── */
+        .topology-section {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .pipeline-graph {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px 10px;
+            position: relative;
+        }
+
+        .node {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .node.active {
+            border-color: var(--cyan);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+            background: rgba(56, 189, 248, 0.04);
+        }
+
+        .node-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .node-sub {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+        }
+
+        .node-badge {
+            display: inline-block;
+            margin-top: 8px;
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .badge-ready { background: rgba(52, 211, 153, 0.15); color: var(--emerald); }
+        .badge-gpu { background: rgba(56, 189, 248, 0.15); color: var(--cyan); }
+        .badge-ollama { background: rgba(192, 132, 252, 0.15); color: var(--purple); }
+
+        .connector {
+            width: 30px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--border), var(--cyan));
+            position: relative;
+        }
+
+        .connector::after {
+            content: '▶';
+            position: absolute;
+            right: -4px;
+            top: -6px;
+            font-size: 10px;
+            color: var(--cyan);
+        }
+
+        /* ─── Log Table ──────────────────────────────────────────── */
+        .logs-section {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        th {
+            color: var(--text-sub);
+            font-weight: 600;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-main);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .tag {
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .tag-consensus { background: rgba(52, 211, 153, 0.15); color: var(--emerald); border: 1px solid rgba(52, 211, 153, 0.3); }
+        .tag-judge { background: rgba(192, 132, 252, 0.15); color: var(--purple); border: 1px solid rgba(192, 132, 252, 0.3); }
+        .tag-lstm { background: rgba(56, 189, 248, 0.15); color: var(--cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
+        .tag-fallback { background: rgba(251, 191, 36, 0.15); color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.3); }
+
+        .btn-clear {
+            background: rgba(244, 63, 94, 0.1);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: var(--rose);
+            padding: 6px 14px;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-clear:hover {
+            background: rgba(244, 63, 94, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .empty-logs {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--text-sub);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 1024px) {
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .pipeline-graph { flex-direction: column; gap: 12px; }
+            .connector { width: 2px; height: 20px; }
+            .connector::after { content: '▼'; right: -4px; top: 12px; }
+        }
+        @media (max-width: 640px) {
+            .metrics-grid { grid-template-columns: 1fr; }
+            header { flex-direction: column; gap: 16px; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        
+        <!-- ─── Header ──────────────────────────────────────────── -->
+        <header>
+            <div class="brand-section">
+                <div class="brand-icon">🤟</div>
+                <div class="brand-text">
+                    <h1>Signo Telemetry & Control</h1>
+                    <p>Real-Time Parallel Consensus & Hardware Monitor</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    <span id="system-status-text">SYSTEM ONLINE</span>
+                </div>
+                <a href="/" class="btn-nav">
+                    <span>⬅ Back to Translator</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- ─── Hardware & System Metrics Grid ──────────────────── -->
+        <div class="metrics-grid">
+            <!-- CPU Usage -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">CPU Load</span>
+                    <span class="card-icon">⚡</span>
+                </div>
+                <div class="card-value" id="val-cpu">--%</div>
+                <div class="card-subtext" id="sub-cpu">-- Cores Active</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-cyan" id="bar-cpu" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Memory Usage -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">System Memory</span>
+                    <span class="card-icon">🧠</span>
+                </div>
+                <div class="card-value" id="val-mem">--%</div>
+                <div class="card-subtext" id="sub-mem">-- / -- MB</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-purple" id="bar-mem" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Consensus Rate -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Consensus Rate</span>
+                    <span class="card-icon">🤝</span>
+                </div>
+                <div class="card-value" id="val-consensus">--%</div>
+                <div class="card-subtext" id="sub-consensus">0 Agreement / 0 Disputes</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-emerald" id="bar-consensus" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <!-- Avg Pipeline Latency -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Avg Latency</span>
+                    <span class="card-icon">⏱️</span>
+                </div>
+                <div class="card-value" id="val-latency">-- ms</div>
+                <div class="card-subtext" id="sub-latency">Total Requests: 0</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-amber" id="bar-latency" style="width: 30%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Pipeline Topology Visualizer ────────────────────── -->
+        <div class="topology-section">
+            <div class="section-title">
+                <span>Parallel Consensus Pipeline Architecture</span>
+                <span style="font-size: 0.8rem; color: var(--text-sub);" id="val-uptime">Uptime: --</span>
+            </div>
+
+            <div class="pipeline-graph">
+                <!-- Input Node -->
+                <div class="node active">
+                    <div class="node-title">📷 Video Feed / Input</div>
+                    <div class="node-sub">Keypoint Extraction & Storyboard</div>
+                    <span class="node-badge badge-ready">10FPS Motion Detect</span>
+                </div>
+
+                <div class="connector"></div>
+
+                <!-- CNN-LSTM Node -->
+                <div class="node active">
+                    <div class="node-title">🧠 CNN-LSTM Model</div>
+                    <div class="node-sub">Keypoint Trajectory Classifier</div>
+                    <span class="node-badge badge-gpu" id="badge-tf">TensorFlow GPU</span>
+                </div>
+
+                <div class="connector"></div>
+
+                <!-- Qwen2-VL Node -->
+                <div class="node active">
+                    <div class="node-title">👁️ Qwen2-VL Storyboard</div>
+                    <div class="node-sub">Direct Visual & Facial Analysis</div>
+                    <span class="node-badge badge-ollama" id="badge-vlm">Ollama VLM:2b</span>
+                </div>
+
+                <div class="connector"></div>
+
+                <!-- Judge LLM Node -->
+                <div class="node active">
+                    <div class="node-title">⚖️ Judge Agent (qwen2.5:3b)</div>
+                    <div class="node-sub">Resolves Disagreements</div>
+                    <span class="node-badge badge-ready" id="badge-judge">Dialect Context Router</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Real-Time Inference Stream Log ─────────────────── -->
+        <div class="logs-section">
+            <div class="section-title">
+                <span>Real-Time Inference Activity Feed</span>
+                <button class="btn-clear" onclick="clearLogs()">Clear History</button>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Decision Pipeline</th>
+                            <th>LSTM Prediction</th>
+                            <th>VLM Prediction</th>
+                            <th>Final Selected Word</th>
+                            <th>Dialect</th>
+                            <th>Latency</th>
+                            <th>Reasoning / Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body">
+                        <tr>
+                            <td colspan="8" class="empty-logs">Waiting for real-time predictions...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ─── Telemetry Polling Script ─────────────────────────────────
+        async function fetchTelemetry() {
+            try {
+                const response = await fetch('/api/telemetry/');
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                // 1. Hardware Metrics
+                document.getElementById('val-cpu').innerText = `${data.system.cpu_percent}%`;
+                document.getElementById('sub-cpu').innerText = `${data.system.cpu_count} CPU Cores Active`;
+                document.getElementById('bar-cpu').style.width = `${data.system.cpu_percent}%`;
+
+                document.getElementById('val-mem').innerText = `${data.system.memory_percent}%`;
+                document.getElementById('sub-mem').innerText = `${data.system.memory_used_mb} / ${data.system.memory_total_mb} MB`;
+                document.getElementById('bar-mem').style.width = `${data.system.memory_percent}%`;
+
+                // 2. Inference Metrics
+                const metrics = data.inference_metrics;
+                document.getElementById('val-consensus').innerText = `${metrics.consensus_rate_pct}%`;
+                document.getElementById('sub-consensus').innerText = `${metrics.consensus_count} Agreements / ${metrics.judge_count} Disputes`;
+                document.getElementById('bar-consensus').style.width = `${metrics.consensus_rate_pct}%`;
+
+                document.getElementById('val-latency').innerText = `${metrics.avg_latency_ms} ms`;
+                document.getElementById('sub-latency').innerText = `Total Requests: ${metrics.total_requests}`;
+
+                document.getElementById('val-uptime').innerText = `Uptime: ${data.system.uptime}`;
+
+                // 3. AI Status Badges
+                const tfBadge = document.getElementById('badge-tf');
+                if (data.ai_engine.gpu.gpu_available) {
+                    tfBadge.innerText = `TensorFlow GPU (${data.ai_engine.gpu.device_count} Dev)`;
+                    tfBadge.className = 'node-badge badge-gpu';
+                } else {
+                    tfBadge.innerText = 'TensorFlow CPU';
+                    tfBadge.className = 'node-badge badge-ready';
+                }
+
+                const vlmBadge = document.getElementById('badge-vlm');
+                if (data.ai_engine.ollama.online) {
+                    vlmBadge.innerText = `Ollama Online (${data.ai_engine.ollama.models.length} models)`;
+                    vlmBadge.className = 'node-badge badge-ollama';
+                } else {
+                    vlmBadge.innerText = 'Ollama Offline';
+                    vlmBadge.className = 'node-badge badge-ready';
+                }
+
+                // 4. Render Table Logs
+                renderLogsTable(data.recent_logs);
+
+            } catch (err) {
+                console.warn("Telemetry poll error:", err);
+            }
+        }
+
+        function renderLogsTable(logs) {
+            const tbody = document.getElementById('logs-table-body');
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-logs">No predictions recorded yet in this session. Start signing in the app!</td></tr>';
+                return;
+            }
+
+            let html = '';
+            logs.forEach(log => {
+                let tagClass = 'tag-consensus';
+                let tagText = 'CONSENSUS';
+                
+                if (log.decision_type === 'judge') {
+                    tagClass = 'tag-judge';
+                    tagText = 'JUDGE DEBATE';
+                } else if (log.decision_type === 'lstm_only') {
+                    tagClass = 'tag-lstm';
+                    tagText = 'LSTM DIRECT';
+                } else if (log.decision_type === 'fallback') {
+                    tagClass = 'tag-fallback';
+                    tagText = 'FALLBACK';
+                }
+
+                html += `
+                    <tr>
+                        <td style="color: var(--text-sub); font-family: monospace;">${log.timestamp}</td>
+                        <td><span class="tag ${tagClass}">${tagText}</span></td>
+                        <td><strong>${log.lstm_pred}</strong> <span style="font-size:0.75rem; color:var(--text-sub);">(${log.lstm_conf}%)</span></td>
+                        <td><strong>${log.vlm_pred || 'N/A'}</strong></td>
+                        <td style="color: var(--cyan); font-weight: 700;">${log.final_pred}</td>
+                        <td><span style="font-size:0.78rem;">${log.dialect}</span></td>
+                        <td style="font-family: monospace;">${log.latency_ms} ms</td>
+                        <td style="color: var(--text-sub); font-size:0.8rem;">${log.reasoning}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        async function clearLogs() {
+            try {
+                await fetch('/api/clear_logs/', { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+                fetchTelemetry();
+            } catch (err) {
+                console.error("Clear logs error:", err);
+            }
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Start 2-second telemetry loop
+        fetchTelemetry();
+        setInterval(fetchTelemetry, 2000);
+    </script>
+</body>
+</html>

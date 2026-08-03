@@ -114,3 +114,22 @@ def smooth_sentence(request):
             status=500
         )
 
+
+def dashboard(request):
+    """Render the live telemetry dashboard UI."""
+    return render(request, 'app/dashboard.html')
+
+
+def api_telemetry(request):
+    """JSON API endpoint returning live system telemetry snapshot."""
+    from app.telemetry import get_telemetry_snapshot
+    return JsonResponse(get_telemetry_snapshot())
+
+
+@require_POST
+def api_clear_logs(request):
+    """Reset telemetry history logs."""
+    from app.telemetry import clear_telemetry_logs
+    clear_telemetry_logs()
+    return JsonResponse({'status': 'success', 'message': 'Telemetry logs cleared.'})
+
