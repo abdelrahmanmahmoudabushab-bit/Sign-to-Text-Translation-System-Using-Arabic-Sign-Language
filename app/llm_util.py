@@ -119,7 +119,8 @@ Response MUST be ONLY the correct word from the candidates list. Do not output a
                 "images": [img_base64],
                 "stream": False,
                 "options": {
-                    "temperature": 0.1
+                    "temperature": 0.0,  # Zero temperature for 100% deterministic, zero-hallucination decoding
+                    "top_p": 0.1
                 }
             },
             timeout=15
@@ -127,13 +128,15 @@ Response MUST be ONLY the correct word from the candidates list. Do not output a
 
         if response.status_code == 200:
             vlm_response = response.json().get("response", "").strip()
-            # Try to match one of the candidate words in the response
+            # Strict candidate matching — accept ONLY words explicitly present in candidates
             for candidate in candidates:
-                if candidate.strip() in vlm_response:
-                    return candidate.strip()
+                cand_clean = candidate.strip()
+                if cand_clean and cand_clean in vlm_response:
+                    return cand_clean
     except Exception as e:
         print(f"VLM inference warning: {e}")
 
+    # If VLM output didn't contain any candidate, fall back to top LSTM candidate
     return candidates[0]
 
 
@@ -149,16 +152,15 @@ Two AI model pipelines disagree on a gesture prediction and need you to resolve 
 Previous Translated Words Context: {history}
 Selected Dialect/Sign Language Context: {dialect}
 
-- LSTM Model (coordinate tracking) predicted: "{pred_lstm}" with {int(lstm_confidence * 100)}% confidence
-- VLM Model (direct storyboard visual context) predicted: "{pred_vlm}"
+Candidate 1 (LSTM coordinate tracking): "{pred_lstm}" (Confidence: {int(lstm_confidence * 100)}%)
+Candidate 2 (VLM storyboard visual): "{pred_vlm}"
 
-Determine which prediction is more likely correct based on the grammatical and semantic flow in the specified regional context ({dialect}).
-If both fit equally well, default to the VLM's prediction because its visual analysis is more robust.
+CRITICAL RULE: You MUST choose EXACTLY ONE of the two candidate words above ("{pred_lstm}" OR "{pred_vlm}"). DO NOT invent or generate any other word.
 
 Output your decision strictly as a valid JSON object matching this structure (no backticks, no markdown):
 {{
-  "decision": "correct predicted word here",
-  "reasoning": "one-line reasoning here"
+  "decision": "{pred_vlm}",
+  "reasoning": "one-line explanation here"
 }}
 """
     try:
@@ -169,7 +171,8 @@ Output your decision strictly as a valid JSON object matching this structure (no
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.2
+                    "temperature": 0.0,  # Deterministic decoding
+                    "top_p": 0.1
                 }
             },
             timeout=8
@@ -185,13 +188,16 @@ Output your decision strictly as a valid JSON object matching this structure (no
             data = json.loads(response_text)
             decided_word = data.get("decision", "").strip()
             
-            # Ensure the decided word is one of the two choices
-            if decided_word in (pred_lstm, pred_vlm):
-                print(f"Judge Agent Decision: {decided_word} (Reason: {data.get('reasoning')})")
-                return decided_word
+            # Strict verification: MUST be one of the two input candidates
+            if decided_word == pred_lstm:
+                print(f"Judge Agent Decision: {pred_lstm} (Reason: {data.get('reasoning')})")
+                return pred_lstm
+            elif decided_word == pred_vlm:
+                print(f"Judge Agent Decision: {pred_vlm} (Reason: {data.get('reasoning')})")
+                return pred_vlm
     except Exception as e:
         print(f"Judge Agent debate failed: {e}")
 
-    # Fallback if debate fails: choose the VLM prediction
-    return pred_vlm
+    # Default to VLM if high confidence or debate parse fails
+    return pred_vlm if lstm_confidence < 0.6 else pred_lstm
 

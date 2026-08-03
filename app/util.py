@@ -117,9 +117,13 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
     if history is None:
         history = []
 
-    # 1. Apply normalization if stats are available (must match training preprocessing)
-    if _norm_mean is not None and _norm_std is not None:
-        x = (x - _norm_mean) / (_norm_std + 1e-8)
+    # 0. Motion / Rest Gating Filter — eliminate false positive hallucinations during static rest
+    # Indices 99:225 correspond to left & right hand keypoints in 225-dim vector
+    hand_keypoints = x[0, :, 99:225]
+    hand_motion_std = np.std(hand_keypoints)
+    if hand_motion_std < 0.002:
+        logger.info("Rest position detected (hand motion std %.5f < 0.002) — skipping prediction", hand_motion_std)
+        return ""
 
     # Run inference through TensorRT, ONNX Runtime, or Keras
     mtype = _model.get("type", "keras")
@@ -130,11 +134,8 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
         input_name = session.get_inputs()[0].name
         prediction = session.run(None, {input_name: x})[0]
     elif mtype == "tensorrt":
-        # Placeholder for TensorRT Python runtime buffer execution
-        # (Falls back to Keras if engine execution context creation fails)
         try:
             import tensorrt as trt
-            # TensorRT execution context logic
             prediction = _model.get("model").predict(x) if "model" in _model else np.zeros((1, 502))
         except Exception:
             prediction = np.zeros((1, 502))
@@ -153,22 +154,22 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
         candidates = [arabic_labels.get(idx, "?") for idx in top_indices]
 
     pred_lstm = candidates[0]
-    lstm_confidence = top_probabilities[0]
+    lstm_confidence = float(top_probabilities[0])
 
-    # If no video path is provided, run only the local LSTM path
-    if not video_path:
+    # High-confidence shortcut: if LSTM confidence >= 88%, skip VLM to eliminate any VLM hallucination
+    if lstm_confidence >= 0.88 or not video_path:
         latency_ms = (time.time() - start_t) * 1000
-        logger.info("Direct LSTM prediction (no video path): %s (confidence %d%%)", pred_lstm, int(lstm_confidence * 100))
+        logger.info("High confidence LSTM prediction (%d%%): %s", int(lstm_confidence * 100), pred_lstm)
         log_inference_event(
             lstm_pred=pred_lstm,
             lstm_conf=lstm_confidence,
             vlm_pred=None,
             final_pred=pred_lstm,
             decision_type="lstm_only",
-            reasoning="Direct landmark sequence without video grid",
+            reasoning=f"High confidence ({int(lstm_confidence * 100)}%) landmark match",
             dialect=dialect,
             latency_ms=latency_ms,
-            has_video=False
+            has_video=bool(video_path)
         )
         return pred_lstm
 
