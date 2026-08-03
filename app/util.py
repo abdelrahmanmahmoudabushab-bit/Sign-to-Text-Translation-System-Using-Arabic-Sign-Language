@@ -142,8 +142,8 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
     else:
         prediction = _model["model"].predict(x)
     
-    # Get top 3 candidates and their probabilities
-    top_indices = np.argsort(prediction[0])[-3:][::-1]
+    # Get top 5 candidates and their probabilities (wider candidate search for accurate matching)
+    top_indices = np.argsort(prediction[0])[-5:][::-1]
     top_probabilities = prediction[0][top_indices]
     
     if _idx_to_arabic:

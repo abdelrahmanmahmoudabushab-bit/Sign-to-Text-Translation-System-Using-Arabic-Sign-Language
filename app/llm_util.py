@@ -95,20 +95,21 @@ def predict_sign_with_vlm(video_path: str, candidates: list, dialect: str = "Sau
         with open(storyboard, "rb") as f:
             img_base64 = base64.b64encode(f.read()).decode("utf-8")
 
+        formatted_candidates = ", ".join([f"'{c}'" for c in candidates])
         prompt = f"""
-Act as an expert sign language translator specializing in the regional dialect: {dialect}.
-The attached image is a 2x3 storyboard containing sequential frames of a person signing.
-Identify which gesture word from the candidates list is being performed in the sequence.
+Act as an expert Arabic Sign Language Master Translator ({dialect}).
+The attached image is a 2x3 sequential storyboard grid of a person performing a sign gesture.
+Your objective is to pick the EXACT correct sign from the candidate list below.
 
-Candidates: {candidates}
+Ranked Candidates: [{formatted_candidates}]
 Selected Dialect: {dialect}
 
-Pay close attention to the signer's:
-1. Facial expressions (eyebrow furrowing, mouth open).
-2. Head and neck movements (head tilts, nods, shakes, neck posture).
-3. Complex hand shapes and movements, including finger twists, palm orientations, wrist rotations, and hand-to-body contact in {dialect}.
+Visual Inspection Checklist:
+1. Contact location: Is the sign performed at the forehead, chest, chin, or open air?
+2. Handshape & Orientation: Are fingers extended, curved, or closed? Are palms facing inward, outward, or downward?
+3. Facial Action: Is there an eyebrow furrow, nod, or mouth movement corresponding to {dialect}?
 
-Response MUST be ONLY the correct word from the candidates list. Do not output anything else.
+Response MUST contain ONLY the exact chosen word string from the Candidates list.
 """
 
         response = requests.post(
