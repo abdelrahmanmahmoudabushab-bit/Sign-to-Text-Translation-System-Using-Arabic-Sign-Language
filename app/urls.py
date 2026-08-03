@@ -8,4 +8,5 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('api/telemetry/', views.api_telemetry, name='api_telemetry'),
     path('api/clear_logs/', views.api_clear_logs, name='api_clear_logs'),
+    path('api/new_signs/', views.api_new_signs, name='api_new_signs'),
 ]

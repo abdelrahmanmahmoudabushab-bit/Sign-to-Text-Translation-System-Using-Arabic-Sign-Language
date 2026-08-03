@@ -162,3 +162,22 @@ def api_clear_logs(request):
     clear_telemetry_logs()
     return JsonResponse({'status': 'success', 'message': 'Telemetry logs cleared.'})
 
+
+def api_new_signs(request):
+    """JSON API endpoint returning stats on self-learning clips collected."""
+    from django.conf import settings
+    new_signs_dir = os.path.join(settings.MEDIA_ROOT, 'new_signs')
+    count = 0
+    samples = []
+    if os.path.exists(new_signs_dir):
+        files = os.listdir(new_signs_dir)
+        json_files = [f for f in files if f.endswith('.json')]
+        count = len(json_files)
+        for jf in sorted(json_files, reverse=True)[:10]:
+            try:
+                with open(os.path.join(new_signs_dir, jf), 'r', encoding='utf-8') as f:
+                    samples.append(json.load(f))
+            except Exception:
+                pass
+    return JsonResponse({'status': 'success', 'count': count, 'recent_samples': samples})
+

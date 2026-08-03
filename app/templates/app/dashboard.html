@@ -162,7 +162,7 @@
         /* ─── Grid Section ───────────────────────────────────────── */
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
         }
 
@@ -501,6 +501,19 @@
                     <div class="progress-bar-fill fill-amber" id="bar-latency" style="width: 30%;"></div>
                 </div>
             </div>
+
+            <!-- Self-Learning Samples Card -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Self-Learning Samples</span>
+                    <span class="card-icon">📦</span>
+                </div>
+                <div class="card-value" id="val-samples">0</div>
+                <div class="card-subtext" id="sub-samples">Un-matched clips saved for retraining</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-purple" id="bar-samples" style="width: 100%;"></div>
+                </div>
+            </div>
         </div>
 
         <!-- ─── Pipeline Topology Visualizer ────────────────────── -->
@@ -630,8 +643,22 @@
                 // 4. Render Table Logs
                 renderLogsTable(data.recent_logs);
 
+                // 5. Fetch Self-Learning Samples
+                fetchNewSigns();
+
             } catch (err) {
                 console.warn("Telemetry poll error:", err);
+            }
+        }
+
+        async function fetchNewSigns() {
+            try {
+                const res = await fetch('/api/new_signs/');
+                if (!res.ok) return;
+                const d = await res.json();
+                document.getElementById('val-samples').innerText = d.count || 0;
+            } catch (e) {
+                console.warn("New signs fetch error:", e);
             }
         }
 
