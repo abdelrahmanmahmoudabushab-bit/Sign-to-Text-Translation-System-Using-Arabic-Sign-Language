@@ -1,0 +1,54 @@
+# ─── Virtual environments ────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ─── Git ─────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ─── Python cache ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# ─── Datasets (30+ GB — NOT needed at runtime) ──────────────────
+datasets/
+
+# ─── Training scripts & logs (not needed in production) ─────────
+train.py
+train_from_landmarks.py
+extract_keypoints_parallel.py
+run_parallel_chunks.py
+monitor_and_train.py
+download_karsl.py
+translate_vocab.py
+test_inference.py
+test_sentence.py
+test_err.log
+test_out.log
+extract_chunk_*.log
+
+# ─── IDE & OS files ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+
+# ─── Docker files (don't copy themselves into image) ─────────────
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# ─── Media demo files ───────────────────────────────────────────
+PBL.mp4
+
+# ─── Desktop/systemd configs (handled by Docker now) ────────────
+signo-app.desktop
+signo.service
+
+# ─── Nginx config (mounted as volume, not baked into app image) ──
+nginx/

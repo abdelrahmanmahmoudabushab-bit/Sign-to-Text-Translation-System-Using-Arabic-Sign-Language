@@ -1,0 +1,146 @@
+# ============================================================================
+#  Signo — Docker Compose Production Stack
+#  Jetson Orin Nano (JetPack 6.x) — Full GPU Acceleration
+#
+#  Usage:
+#    docker compose up -d          # Start everything
+#    docker compose logs -f        # Watch all logs
+#    docker compose down           # Stop everything
+#    docker compose build --no-cache signo-web  # Rebuild after code changes
+# ============================================================================
+
+services:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 1. Signo Web Application (Django + TensorFlow + MediaPipe)
+  # ────────────────────────────────────────────────────────────────────────────
+  signo-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: signo-web
+    restart: unless-stopped
+
+    # ── Full GPU Access ──
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility, video]
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-change-me-in-production-use-a-long-random-string}
+      - DJANGO_DEBUG=False
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,signo-web
+      # Point Ollama URL to the ollama container (internal Docker DNS)
+      - OLLAMA_HOST=http://ollama:11434
+
+    volumes:
+      # Persist uploaded videos and storyboard grids across container restarts
+      - signo-media:/app/media
+      # Persist SQLite database
+      - signo-db:/app/db
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      ollama:
+        condition: service_started
+
+    networks:
+      - signo-net
+
+    # Performance tuning
+    shm_size: '1gb'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 2. Ollama — Local LLM & VLM Engine
+  # ────────────────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: signo-ollama
+    restart: unless-stopped
+
+    # ── Full GPU Access ──
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute]
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Allow Ollama to use maximum GPU memory
+      - OLLAMA_GPU_OVERHEAD=0
+      # Keep models loaded in memory for fast inference
+      - OLLAMA_KEEP_ALIVE=24h
+      # Number of parallel model requests
+      - OLLAMA_NUM_PARALLEL=2
+
+    volumes:
+      # Persist downloaded models (qwen2.5:3b, qwen2-vl:2b) across restarts
+      - ollama-data:/root/.ollama
+
+    ports:
+      - "11434:11434"
+
+    networks:
+      - signo-net
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 3. Nginx — Reverse Proxy (clean URLs on port 80)
+  # ────────────────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: signo-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - signo-media:/app/media:ro
+
+    depends_on:
+      signo-web:
+        condition: service_started
+
+    networks:
+      - signo-net
+
+# ────────────────────────────────────────────────────────────────────────────
+# Shared Resources
+# ────────────────────────────────────────────────────────────────────────────
+volumes:
+  signo-media:
+    driver: local
+  signo-db:
+    driver: local
+  ollama-data:
+    driver: local
+
+networks:
+  signo-net:
+    driver: bridge

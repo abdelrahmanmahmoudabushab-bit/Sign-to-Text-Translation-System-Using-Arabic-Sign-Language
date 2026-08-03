@@ -2,7 +2,7 @@ import requests
 import json
 import os
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/generate"
 DEFAULT_MODEL = "qwen2.5:3b" # Or gemma2:2b
 
 def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model=DEFAULT_MODEL):
