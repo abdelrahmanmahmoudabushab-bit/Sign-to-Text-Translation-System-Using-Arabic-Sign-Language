@@ -3,9 +3,13 @@ import json
 import os
 
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/generate"
-DEFAULT_MODEL = "qwen2.5:3b" # Or gemma2:2b
 
-def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model=DEFAULT_MODEL):
+# ─── Dedicated Standalone AI Models ──────────────────────────────────────────
+VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2-vl:2b")          # Vision Classifier
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen2.5:3b")        # Arbitration Judge
+TRANSLATOR_MODEL = os.environ.get("TRANSLATOR_MODEL", "qwen2.5:3b") # Sentence Grammar Reconstructor
+
+def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model=TRANSLATOR_MODEL):
     """
     Takes a list of raw sign language words, queries the local Ollama LLM, 
     and returns a grammatically correct sentence in the selected dialect and its English translation.
@@ -75,7 +79,7 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
     }
 
 
-def predict_sign_with_vlm(video_path: str, candidates: list, dialect: str = "Saudi Arabic Sign Language", model: str = "qwen2-vl:2b") -> str:
+def predict_sign_with_vlm(video_path: str, candidates: list, dialect: str = "Saudi Arabic Sign Language", model: str = VLM_MODEL) -> str:
     """
     Extracts storyboard frames from a video, feeds them to the local VLM (Qwen2-VL),
     and predicts which gesture candidate is performed in the video.
@@ -139,7 +143,7 @@ Output ONLY the exact string of the winning candidate word from the Candidate Po
     return candidates[0]
 
 
-def debate_and_decide(pred_lstm: str, lstm_confidence: float, pred_vlm: str, history: list, dialect: str = "Saudi Arabic Sign Language", model: str = DEFAULT_MODEL) -> str:
+def debate_and_decide(pred_lstm: str, lstm_confidence: float, pred_vlm: str, history: list, dialect: str = "Saudi Arabic Sign Language", model: str = JUDGE_MODEL) -> str:
     """
     Spawns the local LLM as a Judge agent to evaluate a disagreement
     between the LSTM model and the VLM model.

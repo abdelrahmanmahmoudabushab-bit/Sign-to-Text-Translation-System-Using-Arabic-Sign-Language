@@ -33,10 +33,19 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# ─── Pre-pull Ollama models if not already cached ────────────────────────────
-echo "📦 Ensuring Ollama models are available..."
-curl -s -X POST http://ollama:11434/api/pull -d '{"name":"qwen2.5:3b"}' > /dev/null 2>&1 &
-curl -s -X POST http://ollama:11434/api/pull -d '{"name":"qwen2-vl:2b"}' > /dev/null 2>&1 &
+# ─── Pre-pull standalone Ollama models if not already cached ─────────────────
+VLM_MODEL=${VLM_MODEL:-qwen2-vl:2b}
+JUDGE_MODEL=${JUDGE_MODEL:-qwen2.5:3b}
+TRANSLATOR_MODEL=${TRANSLATOR_MODEL:-qwen2.5:3b}
+
+echo "📦 Ensuring standalone Ollama models are available..."
+echo "   - VLM Model:        $VLM_MODEL"
+echo "   - Judge Model:      $JUDGE_MODEL"
+echo "   - Translator Model: $TRANSLATOR_MODEL"
+
+curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"$VLM_MODEL\"}" > /dev/null 2>&1 &
+curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"$JUDGE_MODEL\"}" > /dev/null 2>&1 &
+curl -s -X POST http://ollama:11434/api/pull -d "{\"name\":\"$TRANSLATOR_MODEL\"}" > /dev/null 2>&1 &
 
 # ─── Print GPU info ─────────────────────────────────────────────────────────
 echo ""

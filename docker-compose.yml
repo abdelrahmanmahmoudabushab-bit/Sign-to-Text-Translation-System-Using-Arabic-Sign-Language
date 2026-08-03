@@ -39,6 +39,10 @@ services:
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,signo-web
       # Point Ollama URL to the ollama container (internal Docker DNS)
       - OLLAMA_HOST=http://ollama:11434
+      # Standalone Dedicated AI Models
+      - VLM_MODEL=${VLM_MODEL:-qwen2-vl:2b}
+      - JUDGE_MODEL=${JUDGE_MODEL:-qwen2.5:3b}
+      - TRANSLATOR_MODEL=${TRANSLATOR_MODEL:-qwen2.5:3b}
 
     volumes:
       # Persist uploaded videos and storyboard grids across container restarts
