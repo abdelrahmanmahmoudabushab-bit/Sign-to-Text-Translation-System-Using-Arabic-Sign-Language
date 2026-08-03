@@ -1,7 +1,27 @@
-imageio
-numpy
-matplotlib
-mediapipe
-Pillow
-tensorflow
-scikit-learn
+# Core framework
+django==5.2.16
+
+# ML & Computer Vision
+tensorflow==2.15.1
+keras==2.15.0
+mediapipe==0.10.14
+scikit-learn==1.9.0
+opencv-python==4.11.0.86
+
+# Data processing
+numpy==1.26.4
+Pillow==12.3.0
+pyarrow==25.0.0
+tqdm==4.70.0
+
+# Visualization (training analysis)
+matplotlib==3.11.1
+imageio==2.37.4
+
+# Web & API
+requests==2.34.2
+
+# Utilities
+psutil>=5.9.0
+kaggle==2.2.4
+deep-translator==1.11.4

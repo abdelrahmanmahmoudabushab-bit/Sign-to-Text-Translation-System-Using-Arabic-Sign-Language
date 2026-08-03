@@ -1,10 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Recorder</title>
+    <meta name="description" content="Real-time Arabic Sign Language to text translation system using AI and computer vision.">
+    <title>Signo — Arabic Sign Language Translation</title>
+    <!-- Import Outfit Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Kufi+Arabic:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0b0f19, #111827, #1f2937);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --success-hover: #059669;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --warning: #f59e0b;
+            --glass-bg: rgba(17, 24, 39, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
         body {
             margin: 0;
             padding: 0;
@@ -12,95 +30,582 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            background: linear-gradient(135deg, #1a2a6c, #000000, #5c5b5a);
-            color: white;
-            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: var(--bg-gradient);
+            color: var(--text);
+            font-family: 'Outfit', 'Noto Kufi Arabic', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 90%;
+            max-width: 850px;
+            padding: 30px;
+            border-radius: 24px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            transition: transform 0.3s ease;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            background: #000;
+            aspect-ratio: 4/3;
+            max-width: 640px;
         }
 
         video {
-            width: 80%;
-            max-width: 800px;
-            height: auto;
-            border: 3px solid white;
-            border-radius: 10px;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .recording-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .recording-indicator.active {
+            opacity: 1;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .recording-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ef4444;
+        }
+
+        /* Camera error overlay */
+        .camera-error {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10;
+            gap: 16px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .camera-error.visible {
+            display: flex;
+        }
+
+        .camera-error svg {
+            width: 48px;
+            height: 48px;
+            color: var(--warning);
+        }
+
+        .camera-error p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        #retryCamera {
+            padding: 10px 24px;
+            background: var(--primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            flex: none;
+        }
+
+        #retryCamera:hover {
+            background: var(--primary-hover);
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 25px;
+            width: 100%;
+            max-width: 640px;
         }
 
         button {
-            margin: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
+            flex: 1;
+            padding: 14px 28px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
             color: white;
-            background: #333;
             border: none;
-            border-radius: 5px;
+            border-radius: 12px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            outline: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #startButton {
+            background: linear-gradient(135deg, var(--success), #059669);
+        }
+
+        #startButton:hover:not(:disabled) {
+            background: linear-gradient(135deg, var(--success-hover), #047857);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+        }
+
+        #stopButton {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+        }
+
+        #stopButton:hover:not(:disabled) {
+            background: linear-gradient(135deg, var(--danger-hover), #b91c1c);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(239, 68, 68, 0.3);
         }
 
         button:disabled {
-            background: #555;
+            background: #374151 !important;
+            color: #6b7280 !important;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+            opacity: 0.6;
         }
 
-        button:not(:disabled):hover {
-            background: #555;
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .result-container {
+            margin-top: 30px;
+            width: 100%;
+            max-width: 640px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .result-label {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            height: 80px;
+            padding: 15px;
+            font-family: 'Noto Kufi Arabic', inherit;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #60a5fa;
+            background: rgba(17, 24, 39, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            resize: none;
+            outline: none;
+            text-align: center;
+            box-sizing: border-box;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            border-color: rgba(96, 165, 250, 0.5);
+        }
+
+        /* Word history chips */
+        .word-history {
+            margin-top: 12px;
+            width: 100%;
+            max-width: 640px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            min-height: 32px;
+        }
+
+        .word-chip {
+            background: rgba(96, 165, 250, 0.15);
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            color: #93c5fd;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-family: 'Noto Kufi Arabic', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            animation: chipIn 0.3s ease;
+        }
+
+        @keyframes chipIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* Sentence controls */
+        .sentence-controls {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 640px;
+            justify-content: center;
+        }
+
+        .sentence-controls button {
+            flex: 0 1 auto;
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            border-radius: 10px;
+        }
+
+        #smoothButton {
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        }
+
+        #smoothButton:hover:not(:disabled) {
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
+        }
+
+        #clearButton {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        #clearButton:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        /* Smoothed sentence output */
+        .smooth-output {
+            margin-top: 16px;
+            width: 100%;
+            max-width: 640px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .smooth-output.visible {
+            display: flex;
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .smooth-row {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding: 10px 16px;
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 12px;
+        }
+
+        .smooth-row .lang-tag {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            min-width: 30px;
+            font-weight: 600;
+        }
+
+        .smooth-row .lang-text {
+            font-size: 1.1rem;
+            color: #c4b5fd;
+            font-weight: 600;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: none;
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255, 255, 255, 0.15);
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .spinner.active {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .footer-tips {
+            margin-top: 25px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-align: center;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .footer-tips span {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .footer-tips kbd {
+            background: #374151;
+            color: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+            box-shadow: 0 2px 0 #1f2937;
         }
     </style>
 </head>
 <body>
-    <video id="myVideo" style="transform: scaleX(-1);" autoplay></video>
-    <br>
-    <button id="startButton" disabled>Start Recording (Press 's')</button>
-    <button id="stopButton" disabled>Stop Recording (Press 'q')</button>
+    <div class="container">
+        <h1>Signo Arabic Translation System</h1>
+
+        <div class="video-wrapper">
+            <video id="myVideo" autoplay muted aria-label="Webcam feed for sign language recognition"></video>
+            <div class="recording-indicator" id="recordingIndicator" aria-live="polite">
+                <div class="recording-dot"></div>
+                <span>RECORDING</span>
+            </div>
+            <div class="camera-error" id="cameraError">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <p>Camera access denied or unavailable.<br>Please allow camera access and try again.</p>
+                <button id="retryCamera" aria-label="Retry camera access">Retry Camera</button>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="startButton" disabled aria-label="Start recording sign gesture">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8m0 1a5 5 0 1 0 0-10 5 5 0 0 0 0 10"/></svg>
+                Start Recording
+            </button>
+            <button id="stopButton" disabled aria-label="Stop recording and translate">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5"/></svg>
+                Stop &amp; Translate
+            </button>
+        </div>
+
+        <div class="result-container">
+            <div class="result-label">Translation / الترجمة</div>
+            <div style="display:flex; align-items:center; gap:12px; width:100%;">
+                <textarea id="resultTextarea" placeholder="..." readonly aria-label="Translation result"></textarea>
+                <div class="spinner" id="spinner"></div>
+            </div>
+        </div>
+
+        <!-- Word history for sentence building -->
+        <div class="word-history" id="wordHistory" aria-label="Collected sign words"></div>
+
+        <div class="sentence-controls">
+            <button id="smoothButton" disabled aria-label="Build sentence from collected words">
+                ✨ Build Sentence
+            </button>
+            <button id="clearButton" aria-label="Clear collected words">
+                ✕ Clear
+            </button>
+        </div>
+
+        <!-- Smoothed sentence output -->
+        <div class="smooth-output" id="smoothOutput">
+            <div class="smooth-row">
+                <span class="lang-tag">AR</span>
+                <span class="lang-text" id="smoothArabic"></span>
+            </div>
+            <div class="smooth-row">
+                <span class="lang-tag">EN</span>
+                <span class="lang-text" id="smoothEnglish"></span>
+            </div>
+        </div>
+
+        <div class="footer-tips">
+            <span><kbd>S</kbd> Start recording</span>
+            <span><kbd>Q</kbd> Stop &amp; translate</span>
+            <span><kbd>B</kbd> Build sentence</span>
+            <span><kbd>C</kbd> Clear words</span>
+        </div>
+    </div>
 
     <script>
+        // ─── State ────────────────────────────────────────────────────
         let mediaRecorder;
         let recordedBlobs;
+        let collectedWords = [];
+
+        // ─── CSRF Token ───────────────────────────────────────────────
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrfToken = getCookie('csrftoken');
+
+        // ─── DOM Elements ─────────────────────────────────────────────
+        const $ = (sel) => document.querySelector(sel);
+        const startBtn = $('#startButton');
+        const stopBtn = $('#stopButton');
+        const smoothBtn = $('#smoothButton');
+        const clearBtn = $('#clearButton');
+        const resultArea = $('#resultTextarea');
+        const spinner = $('#spinner');
+        const wordHistory = $('#wordHistory');
+        const smoothOutput = $('#smoothOutput');
+        const cameraError = $('#cameraError');
+        const retryBtn = $('#retryCamera');
 
         const constraints = {
             audio: false,
             video: {
-                width: 320, height: 240
+                width: 640,
+                height: 480,
+                frameRate: { ideal: 30, max: 30 }
             }
-            
         };
 
+        // ─── Camera Init ──────────────────────────────────────────────
         async function init(constraints) {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 handleSuccess(stream);
             } catch (e) {
                 console.error('navigator.getUserMedia error:', e);
+                cameraError.classList.add('visible');
             }
         }
 
         function handleSuccess(stream) {
-            const video = document.querySelector('video');
+            const video = $('#myVideo');
             video.srcObject = stream;
             window.stream = stream;
+            startBtn.disabled = false;
+            cameraError.classList.remove('visible');
         }
 
+        retryBtn.addEventListener('click', () => {
+            cameraError.classList.remove('visible');
+            init(constraints);
+        });
+
+        // ─── Keyboard Shortcuts ───────────────────────────────────────
         document.addEventListener('keydown', (event) => {
-            if (event.key === 's') {
+            const key = event.key.toLowerCase();
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+
+            if (key === 's' && !startBtn.disabled) {
                 startRecording();
-            } else if (event.key === 'q') {
+            } else if (key === 'q' && !stopBtn.disabled) {
                 stopRecording();
                 uploadVideo();
+            } else if (key === 'b' && !smoothBtn.disabled) {
+                buildSentence();
+            } else if (key === 'c') {
+                clearWords();
             }
         });
 
+        // ─── Button Event Listeners ───────────────────────────────────
+        startBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', () => {
+            stopRecording();
+            uploadVideo();
+        });
+        smoothBtn.addEventListener('click', buildSentence);
+        clearBtn.addEventListener('click', clearWords);
+
+        // ─── Recording ────────────────────────────────────────────────
         function startRecording() {
             recordedBlobs = [];
-            document.querySelector('textarea').innerText = '';
+            resultArea.value = '';
+
             let options = { mimeType: 'video/webm;codecs=vp9' };
             if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                console.error(`${options.mimeType} is not Supported`);
                 options = { mimeType: 'video/webm;codecs=vp8' };
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    console.error(`${options.mimeType} is not Supported`);
                     options = { mimeType: 'video/webm' };
                     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                        console.error(`${options.mimeType} is not Supported`);
                         options = { mimeType: '' };
                     }
                 }
@@ -110,25 +615,26 @@
                 mediaRecorder = new MediaRecorder(window.stream, options);
             } catch (e) {
                 console.error('Exception while creating MediaRecorder:', e);
+                resultArea.value = 'Error initializing recorder.';
                 return;
             }
 
-            mediaRecorder.onstop = (event) => {
-                console.log('Recorder stopped: ', event);
-                console.log('Recorded Blobs: ', recordedBlobs);
-            };
-
+            mediaRecorder.onstop = () => {};
             mediaRecorder.ondataavailable = handleDataAvailable;
-            mediaRecorder.start(10); // collect 10ms of data blobs
-            console.log('MediaRecorder started', mediaRecorder);
-            document.querySelector('#startButton').disabled = true;
-            document.querySelector('#stopButton').disabled = false;
+            mediaRecorder.start(10);
+
+            // Update UI state
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            $('#recordingIndicator').classList.add('active');
         }
 
         function stopRecording() {
             mediaRecorder.stop();
-            document.querySelector('#startButton').disabled = false;
-            document.querySelector('#stopButton').disabled = true;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            $('#recordingIndicator').classList.remove('active');
+            setLoading(true, 'Processing translation...');
         }
 
         function handleDataAvailable(event) {
@@ -137,6 +643,7 @@
             }
         }
 
+        // ─── Upload & Inference ───────────────────────────────────────
         async function uploadVideo() {
             const blob = new Blob(recordedBlobs, { type: 'video/webm' });
             const formData = new FormData();
@@ -145,21 +652,103 @@
             try {
                 const response = await fetch('/upload_video/', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
                 });
                 const result = await response.json();
                 console.log('Server response:', result);
-                const message = result['message'];
-                
-                document.querySelector('textarea').innerText = message;
+
+                if (result.status === 'success') {
+                    const word = result.message;
+                    resultArea.value = word;
+                    addWord(word);
+                } else {
+                    resultArea.value = result.message || 'Translation failed.';
+                }
             } catch (error) {
                 console.error('Error uploading video:', error);
+                resultArea.value = 'Network error during translation.';
+            } finally {
+                setLoading(false);
             }
         }
 
+        // ─── Word Collection & Sentence Building ──────────────────────
+        function addWord(word) {
+            if (!word || word === '?') return;
+            collectedWords.push(word);
+            renderWordChips();
+            smoothBtn.disabled = collectedWords.length < 1;
+        }
+
+        function renderWordChips() {
+            wordHistory.innerHTML = '';
+            collectedWords.forEach((w, i) => {
+                const chip = document.createElement('span');
+                chip.className = 'word-chip';
+                chip.textContent = w;
+                chip.title = `Word ${i + 1}`;
+                wordHistory.appendChild(chip);
+            });
+        }
+
+        function clearWords() {
+            collectedWords = [];
+            wordHistory.innerHTML = '';
+            smoothOutput.classList.remove('visible');
+            smoothBtn.disabled = true;
+        }
+
+        async function buildSentence() {
+            if (collectedWords.length === 0) return;
+
+            setLoading(true, 'Building sentence...');
+            smoothBtn.disabled = true;
+
+            try {
+                const response = await fetch('/smooth_sentence/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ words: collectedWords })
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    $('#smoothArabic').textContent = result.arabic;
+                    $('#smoothEnglish').textContent = result.english;
+                    smoothOutput.classList.add('visible');
+                    resultArea.value = result.arabic;
+                } else {
+                    resultArea.value = result.message || 'Sentence building failed.';
+                }
+            } catch (error) {
+                console.error('Error building sentence:', error);
+                resultArea.value = 'Network error during sentence building.';
+            } finally {
+                setLoading(false);
+                smoothBtn.disabled = collectedWords.length < 1;
+            }
+        }
+
+        // ─── UI Helpers ───────────────────────────────────────────────
+        function setLoading(loading, message = '') {
+            if (loading) {
+                spinner.classList.add('active');
+                if (message) resultArea.value = message;
+                startBtn.disabled = true;
+            } else {
+                spinner.classList.remove('active');
+                if (window.stream) startBtn.disabled = false;
+            }
+        }
+
+        // ─── Initialize ───────────────────────────────────────────────
         init(constraints);
     </script>
-
-    <textarea style="font-size: 30px; background-color: transparent; color: white; text-align: center;"></textarea>
 </body>
 </html>

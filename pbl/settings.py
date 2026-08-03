@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,13 +20,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-b!r_c6gv=s=)w0#bwr(c)-#5*mg^35bjz!+=$+s4%mm3kw8um8'
+# SECURITY: Secret key loaded from environment; falls back to dev default ONLY when DEBUG=True.
+_DEFAULT_DEV_KEY = 'django-dev-only-b!r_c6gv=s=)w0#bwr(c)-#5*mg^35bjz!+=$+s4%mm3kw8um8'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', _DEFAULT_DEV_KEY)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# SECURITY: DEBUG controlled via environment variable. Defaults to False in production.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = []
+if not DEBUG and SECRET_KEY == _DEFAULT_DEV_KEY:
+    raise ValueError(
+        "DJANGO_SECRET_KEY environment variable must be set in production. "
+        "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\""
+    )
+
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# CSRF configuration — trust the same origins as ALLOWED_HOSTS
+CSRF_TRUSTED_ORIGINS = [
+    f'http://{host.strip()}' for host in ALLOWED_HOSTS if host.strip()
+] + [
+    f'https://{host.strip()}' for host in ALLOWED_HOSTS if host.strip()
+]
 
 
 # Application definition
@@ -120,8 +135,42 @@ STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# File upload limits — prevent disk exhaustion from oversized uploads
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024   # 50 MB
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Logging configuration — replace print() with structured logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'app': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+    },
+}

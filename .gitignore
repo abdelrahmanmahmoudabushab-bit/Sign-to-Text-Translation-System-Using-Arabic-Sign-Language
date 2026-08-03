@@ -170,3 +170,24 @@ dmypy.json
 
 # pytype static type analyzer
 .pytype/
+
+# ─── Project-specific ───────────────────────────────────────
+# Trained model files (large binary)
+*.keras
+*.h5
+
+# Extraction checkpoint files (memory-mapped, can be huge)
+*.dat
+
+# Dataset cache files
+datasets/
+*.npy
+
+# Django uploaded media
+media/uploaded_videos/
+
+# Extraction chunk logs (already covered by *.log but explicit)
+extract_chunk_*.log
+training_run.log
+monitor_and_train.log
+
