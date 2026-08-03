@@ -9,18 +9,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Kufi+Arabic:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-gradient: linear-gradient(135deg, #0b0f19, #111827, #1f2937);
-            --primary: #3b82f6;
-            --primary-hover: #2563eb;
+            --bg-gradient: linear-gradient(135deg, #fff5f8 0%, #fce7f3 50%, #fbcfe8 100%);
+            --primary: #ec4899;
+            --primary-hover: #db2777;
             --success: #10b981;
             --success-hover: #059669;
             --danger: #ef4444;
             --danger-hover: #dc2626;
             --warning: #f59e0b;
-            --glass-bg: rgba(17, 24, 39, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --text: #f3f4f6;
-            --text-muted: #9ca3af;
+            --glass-bg: rgba(255, 255, 255, 0.92);
+            --glass-border: rgba(244, 114, 182, 0.3);
+            --text: #1f2937;
+            --text-muted: #6b7280;
         }
 
         body {
@@ -35,6 +35,7 @@
             color: var(--text);
             font-family: 'Outfit', 'Noto Kufi Arabic', sans-serif;
             overflow-x: hidden;
+            background-attachment: fixed;
         }
 
         .container {
@@ -48,7 +49,7 @@
             border-radius: 24px;
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 40px rgba(236, 72, 153, 0.15);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             transition: transform 0.3s ease;
@@ -56,11 +57,11 @@
 
         h1 {
             font-size: 2.2rem;
-            font-weight: 700;
+            font-weight: 800;
             margin-top: 0;
             margin-bottom: 20px;
             text-align: center;
-            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            background: linear-gradient(to right, #ec4899, #f43f5e);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: -0.02em;
@@ -631,13 +632,16 @@
     </style>
 </head>
 <body>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-            <h1 style="margin-bottom: 0;">Signo Kiosk Translation System</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 42px; height: 42px; background: linear-gradient(135deg, #ec4899, #f43f5e); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: white; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);">🤟</div>
+                <h1 style="margin-bottom: 0; font-size: 2.2rem; font-weight: 800; background: linear-gradient(to right, #ec4899, #f43f5e); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Signo Kiosk</h1>
+            </div>
             <div style="display: flex; gap: 10px; align-items: center;">
-                <button id="kioskFullscreenBtn" style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; padding: 8px 14px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; min-height: auto; width: auto; flex: none;">
+                <button id="kioskFullscreenBtn" style="background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.3); color: #ec4899; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; min-height: auto; width: auto; flex: none;">
                     <span>⛶ Kiosk Fullscreen</span>
                 </button>
-                <a href="/dashboard/" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; text-decoration: none; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(56, 189, 248, 0.25)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)'">
+                <a href="/dashboard/" style="background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.3); color: #ec4899; text-decoration: none; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(236, 72, 153, 0.2)'" onmouseout="this.style.background='rgba(236, 72, 153, 0.1)'">
                     <span>📊 Live Dashboard</span>
                 </a>
             </div>
