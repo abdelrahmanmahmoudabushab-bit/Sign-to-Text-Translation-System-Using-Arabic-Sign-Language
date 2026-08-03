@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
@@ -65,6 +66,27 @@ def upload_video(request):
         if len(history) > 10:
             history.pop(0)
         request.session['translation_history'] = history
+
+        # On-Device Self-Learning Data Collector: Archive clips for batch retraining
+        if not prediction or prediction == "?":
+            try:
+                new_signs_dir = os.path.join(settings.MEDIA_ROOT, 'new_signs')
+                os.makedirs(new_signs_dir, exist_ok=True)
+                sample_id = f"sample_{int(time.time()*1000)}"
+                archived_clip = os.path.join(new_signs_dir, f"{sample_id}.webm")
+                shutil.copyfile(video_path, archived_clip)
+                
+                meta_path = os.path.join(new_signs_dir, f"{sample_id}.json")
+                with open(meta_path, 'w', encoding='utf-8') as mf:
+                    json.dump({
+                        'sample_id': sample_id,
+                        'dialect': dialect,
+                        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                        'keypoints_shape': list(x.shape)
+                    }, mf, ensure_ascii=False, indent=2)
+                logger.info("Saved un-matched clip to %s for self-learning batch retraining", archived_clip)
+            except Exception as e:
+                logger.warning("Failed to save self-learning clip: %s", e)
 
         import time
         return JsonResponse({
