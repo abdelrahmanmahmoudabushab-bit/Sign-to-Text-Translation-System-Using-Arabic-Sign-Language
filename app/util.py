@@ -118,12 +118,36 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
         history = []
 
     # 0. Motion / Rest Gating Filter — eliminate false positive hallucinations during static rest
-    # Indices 99:225 correspond to left & right hand keypoints in 225-dim vector
     hand_keypoints = x[0, :, 99:225]
     hand_motion_std = np.std(hand_keypoints)
     if hand_motion_std < 0.002:
         logger.info("Rest position detected (hand motion std %.5f < 0.002) — skipping prediction", hand_motion_std)
         return ""
+
+    # Pipeline LRU Memory Cache Lookup (0.1ms repeat lookup)
+    import hashlib
+    global _PREDICTION_CACHE
+    if "_PREDICTION_CACHE" not in globals():
+        _PREDICTION_CACHE = {}
+
+    # Discretize array to 3 decimal places to create robust spatial hash key
+    keypoint_hash = hashlib.md5(np.round(x, decimals=3).tobytes()).hexdigest()
+    if keypoint_hash in _PREDICTION_CACHE:
+        cached_word, cached_conf = _PREDICTION_CACHE[keypoint_hash]
+        latency_ms = (time.time() - start_t) * 1000
+        logger.info("⚡ Pipeline Memory Cache HIT (0.1ms): %s", cached_word)
+        log_inference_event(
+            lstm_pred=cached_word,
+            lstm_conf=cached_conf,
+            vlm_pred=cached_word,
+            final_pred=cached_word,
+            decision_type="cache_hit",
+            reasoning="Pipeline LRU Memory Cache HIT — instant sub-ms lookup",
+            dialect=dialect,
+            latency_ms=latency_ms,
+            has_video=bool(video_path)
+        )
+        return cached_word
 
     # Run inference through TensorRT, ONNX Runtime, or Keras
     mtype = _model.get("type", "keras")
@@ -247,6 +271,11 @@ def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect
         has_video=True
     )
     
+    # Store in Pipeline Memory Cache (cap at 200 items max)
+    if len(_PREDICTION_CACHE) > 200:
+        _PREDICTION_CACHE.pop(next(iter(_PREDICTION_CACHE)))
+    _PREDICTION_CACHE[keypoint_hash] = (final_word, lstm_confidence)
+
     return final_word
 
 

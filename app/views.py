@@ -66,7 +66,14 @@ def upload_video(request):
             history.pop(0)
         request.session['translation_history'] = history
 
-        return JsonResponse({'status': 'success', 'message': prediction})
+        import time
+        return JsonResponse({
+            'status': 'success',
+            'message': prediction,
+            'dialect': dialect,
+            'history_count': len(history),
+            'timestamp': time.strftime('%H:%M:%S')
+        })
 
     except Exception:
         logger.exception("Error during video prediction")
