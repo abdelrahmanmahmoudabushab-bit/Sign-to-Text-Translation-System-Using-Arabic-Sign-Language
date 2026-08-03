@@ -108,17 +108,26 @@ flowchart TD
 * **Browser-Side Motion Segmentation:** 10FPS pixel-difference loop in `index.html` detects when signing pauses and auto-submits video clips.
 * **Regional Dialect Selector:** Supports **Saudi KARSL**, **Egyptian**, **Levantine**, and **Gulf** sign dialects.
 
-### 5. Touchscreen Kiosk UX & Text-To-Speech (TTS)
+### 5. Touchscreen Kiosk UX & 30s Walk-Away Security
+* **White & Soft Pink Theme (`Signo`):** Beautiful, high-readability kiosk interface with `#ec4899` Rose Pink accents and soft white glassmorphic cards.
+* **30-Second Inactivity Auto-Reset:** Automatically clears collected words and resets session text when a user walks away from the kiosk screen.
 * **Touch-Optimized Controls:** Finger-friendly 54px+ touch target buttons, tap highlight suppression, and tactile press scaling (`scale(0.95)`).
 * **HTML5 Web Screen Wake Lock API (`navigator.wakeLock`):** Prevents kiosk screens from dimming or sleeping during 24/7 operation.
-* **Arabic Text-To-Speech (TTS):** One-tap `🔊` audio playback of translated Arabic sentences via `window.speechSynthesis`.
+* **Arabic Text-To-Speech (TTS):** One-tap `🔊` audio playback of translated Arabic sentences via `window.speechSynthesis` (muted by default).
 * **One-Click Copy & Animated Toasts:** Interactive clipboard copying (`📋`) and floating toast alerts (`🤟 Sign detected`).
 * **Fullscreen Kiosk Mode:** One-tap header toggle for borderless display execution.
 
-### 6. Real-Time Telemetry & Control Dashboard (`/dashboard/`)
-* **Hardware Metrics:** Live monitoring of CPU load %, Memory (RAM/VRAM), Disk usage, and TensorFlow GPU status.
-* **Inference Analytics:** Real-time tracking of Consensus Rate %, Average Latency (ms), and Request Counts.
-* **Live Event Stream:** Streaming table showing prediction history, decision pipeline tags (`CONSENSUS`, `JUDGE DEBATE`, `LSTM DIRECT`), latency, and reasoning.
+### 6. Pipeline LRU Memory Caching & 2-Way Bidirectional Data
+* **Sub-Millisecond Repeat Gesture Lookup (0.1ms):** `_PREDICTION_CACHE` spatial MD5 hashing in `app/util.py` caches keypoint vector predictions for instant sub-ms repeated sign lookups.
+* **2-Way Client-Server Metadata:** REST responses return enriched JSON payload including translation, dialect context, session history count, server timestamp, and cache hit flags.
+
+### 7. On-Device Self-Learning & Live Telemetry Dashboard (`/dashboard/`)
+* **Self-Learning Data Archiver:** Automatically saves un-recognized sign video clips + JSON metadata to `media/new_signs/` for future batch model retraining.
+* **Live Telemetry API (`/api/new_signs/`):** Dashboard live counts self-learning samples alongside real-time hardware monitoring (CPU, RAM, GPU, Disk).
+* **Inference Activity Feed:** Streaming event table tracking decision tags (`CONSENSUS`, `JUDGE DEBATE`, `CACHE HIT`, `LSTM DIRECT`), latency, and reasoning.
+
+### 8. NVIDIA Jetson Orin Nano Hardware Tuning (`optimize_jetson.sh`)
+* **MAXN 15W Power Mode:** Automated tuning script configures `nvpmodel -m 0`, locks maximum CPU/GPU frequencies (`jetson_clocks`), forces active fan cooling, enables 4GB ZRAM swap, and sets Docker default-runtime to `nvidia`.
 
 ### 7. Standalone Dedicated AI Model Architecture
 Each agent role is decoupled into independent environment variables for modular swapping:
