@@ -78,11 +78,16 @@ def _init():
                 continue
 
 
-def predict(x: np.ndarray) -> str:
+def predict(x: np.ndarray, video_path: str = None, history: list = None, dialect: str = 'Saudi Arabic Sign Language') -> str:
     """Run model prediction on preprocessed keypoint data and return Arabic label.
+    Runs CNN-LSTM and Qwen2-VL in parallel. If they match, returns consensus.
+    If they mismatch, invokes the Judge LLM to debate and decide.
 
     Args:
         x: numpy array of shape (1, N_FRAMES, N_KEYPOINTS).
+        video_path: Path to the uploaded video file.
+        history: List of previously translated words in the current session.
+        dialect: Selected sign language dialect name.
 
     Returns:
         Predicted Arabic word string, or an error message if model is unavailable.
@@ -92,21 +97,73 @@ def predict(x: np.ndarray) -> str:
     if _model is None:
         return "Model file (conv1_lstm.keras) not found."
 
-    # Apply normalization if stats are available (must match training preprocessing)
+    if history is None:
+        history = []
+
+    # 1. Apply normalization if stats are available (must match training preprocessing)
     if _norm_mean is not None and _norm_std is not None:
         x = (x - _norm_mean) / (_norm_std + 1e-8)
 
     prediction = _model.predict(x)
-    idx = np.argmax(prediction, axis=1).item()
-
+    
+    # Get top 3 candidates and their probabilities
+    top_indices = np.argsort(prediction[0])[-3:][::-1]
+    top_probabilities = prediction[0][top_indices]
+    
     if _idx_to_arabic:
-        predicted_label = _idx_to_arabic.get(idx, "?")
+        candidates = [_idx_to_arabic.get(idx, "?") for idx in top_indices]
     else:
         # Fallback to DataLoader's hardcoded labels
         from app.DataLoader import arabic_labels
-        predicted_label = arabic_labels.get(idx, "?")
+        candidates = [arabic_labels.get(idx, "?") for idx in top_indices]
 
-    return predicted_label
+    pred_lstm = candidates[0]
+    lstm_confidence = top_probabilities[0]
+
+    # If no video path is provided, run only the local LSTM path
+    if not video_path:
+        logger.info("Direct LSTM prediction (no video path): %s (confidence %d%%)", pred_lstm, int(lstm_confidence * 100))
+        return pred_lstm
+
+    # 2. Run the VLM path in parallel (VLM calls Ollama API in the background)
+    import threading
+    from app.llm_util import predict_sign_with_vlm, debate_and_decide
+
+    vlm_result = []
+
+    def run_vlm():
+        try:
+            res = predict_sign_with_vlm(video_path, candidates, dialect)
+            vlm_result.append(res)
+        except Exception as e:
+            logger.warning("VLM background thread error: %s", e)
+
+    vlm_thread = threading.Thread(target=run_vlm)
+    vlm_thread.start()
+    
+    # Wait for the VLM thread to complete (limit to 15 seconds)
+    vlm_thread.join(timeout=15.0)
+
+    if not vlm_result:
+        logger.warning("VLM parallel check timed out. Defaulting to LSTM prediction.")
+        return pred_lstm
+
+    pred_vlm = vlm_result[0]
+
+    # 3. Consensus Check
+    if pred_lstm == pred_vlm:
+        logger.info("Consensus reached: both models predict '%s'.", pred_lstm)
+        return pred_lstm
+
+    # 4. Disagreement: Debate and Decide via Judge LLM
+    logger.info("Disagreement detected! LSTM predicts '%s' (conf %d%%). VLM predicts '%s'. Initiating debate...", 
+                pred_lstm, int(lstm_confidence * 100), pred_vlm)
+    
+    final_word = debate_and_decide(pred_lstm, lstm_confidence, pred_vlm, history, dialect)
+    logger.info("Debate resolved. Final selected word: '%s'", final_word)
+    
+    return final_word
+
 
 
 def main():

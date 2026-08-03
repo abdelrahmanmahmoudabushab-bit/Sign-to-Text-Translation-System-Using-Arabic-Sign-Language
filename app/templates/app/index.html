@@ -178,6 +178,132 @@
             max-width: 640px;
         }
 
+        /* Continuous Mode Toggle styling */
+        .continuous-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 640px;
+            margin-top: 20px;
+            padding: 12px 20px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-sizing: border-box;
+        }
+
+        .switch-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .switch-label input {
+            display: none;
+        }
+
+        .slider {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background-color: #374151;
+            border-radius: 20px;
+            transition: background-color 0.3s ease;
+        }
+
+        .slider::before {
+            content: "";
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .switch-label input:checked + .slider {
+            background-color: var(--primary);
+        }
+
+        .switch-label input:checked + .slider::before {
+            transform: translateX(20px);
+        }
+
+        .toggle-text {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .switch-label input:checked ~ .toggle-text {
+            color: var(--text);
+        }
+
+        .status-badge {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 4px 10px;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.idle {
+            background: rgba(156, 163, 175, 0.1);
+            color: var(--text-muted);
+            border: 1px solid rgba(156, 163, 175, 0.2);
+        }
+
+        .status-badge.signing {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            animation: pulse-glow 1.5s infinite;
+        }
+
+        .status-badge.translating {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+
+        .dialect-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dialect-dropdown {
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dialect-dropdown:focus {
+            border-color: rgba(96, 165, 250, 0.5);
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.15);
+        }
+
         button {
             flex: 1;
             padding: 14px 28px;
@@ -445,12 +571,34 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
                 <p>Camera access denied or unavailable.<br>Please allow camera access and try again.</p>
-                <button id="retryCamera" aria-label="Retry camera access">Retry Camera</button>
+                <button id="retryCamera">Retry</button>
             </div>
         </div>
 
+        <!-- Continuous Mode Toggle & Status -->
+        <div class="continuous-container">
+            <label class="switch-label">
+                <input type="checkbox" id="continuousToggle">
+                <span class="slider"></span>
+                <span class="toggle-text">Continuous Hands-Free Mode</span>
+            </label>
+
+            <!-- Dialect Selection -->
+            <div class="dialect-wrapper">
+                <span class="toggle-text">Dialect:</span>
+                <select id="dialectSelect" class="dialect-dropdown">
+                    <option value="Saudi Arabic Sign Language">Saudi Dialect (KARSL)</option>
+                    <option value="Egyptian Sign Language">Egyptian Dialect</option>
+                    <option value="Levantine Sign Language">Levantine Dialect</option>
+                    <option value="Gulf Sign Language">Gulf Dialect</option>
+                </select>
+            </div>
+
+            <div id="statusIndicator" class="status-badge idle">Idle</div>
+        </div>
+
         <div class="button-group">
-            <button id="startButton" disabled aria-label="Start recording sign gesture">
+            <button id="startButton" disabled aria-label="Start recording">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8m0 1a5 5 0 1 0 0-10 5 5 0 0 0 0 10"/></svg>
                 Start Recording
             </button>
@@ -505,6 +653,15 @@
         let mediaRecorder;
         let recordedBlobs;
         let collectedWords = [];
+        let continuousMode = false;
+        let motionInterval = null;
+        let hiddenCanvas = null;
+        let hiddenCtx = null;
+        let lastFrameData = null;
+        let isSigning = false;
+        let restTicks = 0;
+        let isUploading = false;
+        const MOTION_THRESHOLD = 18; // Motion threshold value (adjustable)
 
         // ─── CSRF Token ───────────────────────────────────────────────
         function getCookie(name) {
@@ -535,6 +692,9 @@
         const smoothOutput = $('#smoothOutput');
         const cameraError = $('#cameraError');
         const retryBtn = $('#retryCamera');
+        const continuousToggle = $('#continuousToggle');
+        const statusIndicator = $('#statusIndicator');
+        const dialectSelect = $('#dialectSelect');
 
         const constraints = {
             audio: false,
@@ -595,6 +755,123 @@
         smoothBtn.addEventListener('click', buildSentence);
         clearBtn.addEventListener('click', clearWords);
 
+        continuousToggle.addEventListener('change', (e) => {
+            continuousMode = e.target.checked;
+            if (continuousMode) {
+                // Disable manual start/stop buttons during auto-mode
+                startBtn.disabled = true;
+                stopBtn.disabled = true;
+                
+                // Initialize hidden canvas for motion analysis
+                if (!hiddenCanvas) {
+                    hiddenCanvas = document.createElement('canvas');
+                    hiddenCanvas.width = 80;
+                    hiddenCanvas.height = 60;
+                    hiddenCtx = hiddenCanvas.getContext('2d');
+                }
+                
+                // Start automated loop
+                startRecording();
+            } else {
+                // Reset state
+                stopRecording();
+                clearInterval(motionInterval);
+                motionInterval = null;
+                lastFrameData = null;
+                isSigning = false;
+                restTicks = 0;
+                
+                // Restore manual buttons
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                statusIndicator.className = "status-badge idle";
+                statusIndicator.textContent = "Idle";
+            }
+        });
+
+        // ─── Motion / Pause Detection Loop ─────────────────────────────
+        function startMotionAnalysis() {
+            if (motionInterval) clearInterval(motionInterval);
+            
+            isSigning = false;
+            restTicks = 0;
+            lastFrameData = null;
+            
+            const videoEl = $('#myVideo');
+            
+            motionInterval = setInterval(() => {
+                if (!continuousMode || !window.stream || isUploading) return;
+                
+                try {
+                    // Draw tiny frame to canvas for super fast pixel checks
+                    hiddenCtx.drawImage(videoEl, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                    const currentFrame = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                    
+                    if (lastFrameData) {
+                        let diff = 0;
+                        const len = currentFrame.data.length;
+                        
+                        // Compare pixel brightness differences
+                        for (let i = 0; i < len; i += 4) {
+                            const rDiff = Math.abs(currentFrame.data[i] - lastFrameData.data[i]);
+                            const gDiff = Math.abs(currentFrame.data[i+1] - lastFrameData.data[i+1]);
+                            const bDiff = Math.abs(currentFrame.data[i+2] - lastFrameData.data[i+2]);
+                            diff += (rDiff + gDiff + bDiff) / 3;
+                        }
+                        
+                        const averageDiff = diff / (hiddenCanvas.width * hiddenCanvas.height);
+                        
+                        // Evaluate motion threshold
+                        if (averageDiff > MOTION_THRESHOLD) {
+                            // User is signing / moving hands
+                            if (!isSigning) {
+                                isSigning = true;
+                                statusIndicator.className = "status-badge signing";
+                                statusIndicator.textContent = "Signing";
+                            }
+                            restTicks = 0;
+                        } else {
+                            // User is resting hands / still
+                            if (isSigning) {
+                                restTicks++;
+                                // 8 ticks = 800ms of consecutive stillness
+                                if (restTicks >= 8) {
+                                    console.log("Pause detected. Triggering segment translation.");
+                                    autoSegmentTranslate();
+                                }
+                            }
+                        }
+                    }
+                    lastFrameData = currentFrame;
+                } catch (e) {
+                    console.error("Motion check error:", e);
+                }
+            }, 100);
+        }
+
+        async function autoSegmentTranslate() {
+            if (isUploading) return;
+            isUploading = true;
+            
+            statusIndicator.className = "status-badge translating";
+            statusIndicator.textContent = "Translating";
+            
+            // Stop current segment recorder
+            mediaRecorder.stop();
+            $('#recordingIndicator').classList.remove('active');
+            
+            // Wait brief moment for chunks to finalize, then upload
+            setTimeout(async () => {
+                await uploadVideo();
+                isUploading = false;
+                
+                // If still in continuous mode, instantly boot up next segment
+                if (continuousMode) {
+                    startRecording();
+                }
+            }, 200);
+        }
+
         // ─── Recording ────────────────────────────────────────────────
         function startRecording() {
             recordedBlobs = [];
@@ -624,15 +901,25 @@
             mediaRecorder.start(10);
 
             // Update UI state
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
+            if (!continuousMode) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                statusIndicator.className = "status-badge idle";
+                statusIndicator.textContent = "Waiting...";
+                startMotionAnalysis();
+            }
             $('#recordingIndicator').classList.add('active');
         }
 
         function stopRecording() {
-            mediaRecorder.stop();
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            if (!continuousMode) {
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
             $('#recordingIndicator').classList.remove('active');
             setLoading(true, 'Processing translation...');
         }
@@ -648,6 +935,7 @@
             const blob = new Blob(recordedBlobs, { type: 'video/webm' });
             const formData = new FormData();
             formData.append('video', blob, 'video.webm');
+            formData.append('dialect', dialectSelect.value);
 
             try {
                 const response = await fetch('/upload_video/', {
@@ -678,6 +966,11 @@
         // ─── Word Collection & Sentence Building ──────────────────────
         function addWord(word) {
             if (!word || word === '?') return;
+            // Suppress consecutive duplicate words (Gap 3 Solution)
+            if (collectedWords.length > 0 && collectedWords[collectedWords.length - 1] === word) {
+                console.log("Duplicate word suppressed:", word);
+                return;
+            }
             collectedWords.push(word);
             renderWordChips();
             smoothBtn.disabled = collectedWords.length < 1;
@@ -706,7 +999,6 @@
 
             setLoading(true, 'Building sentence...');
             smoothBtn.disabled = true;
-
             try {
                 const response = await fetch('/smooth_sentence/', {
                     method: 'POST',
@@ -714,7 +1006,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify({ words: collectedWords })
+                    body: JSON.stringify({ words: collectedWords, dialect: dialectSelect.value })
                 });
                 const result = await response.json();
 

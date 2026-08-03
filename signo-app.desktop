@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Sign-to-Text Translator
+Exec=chromium-browser --app=http://localhost:8000/ --start-maximized --no-first-run
+OnlyShowIn=GNOME;Unity;
+NoDisplay=false
+X-GNOME-Autostart-enabled=true

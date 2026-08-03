@@ -52,9 +52,20 @@ def upload_video(request):
         if x is None:
             return JsonResponse({'status': 'failed', 'message': 'Could not process video frames.'})
 
-        logger.info("Inference input shape: %s", x.shape)
-        prediction = util.predict(x)
+        # Fetch dialect and history from session/request
+        dialect = request.POST.get('dialect', 'Saudi Arabic Sign Language')
+        history = request.session.get('translation_history', [])
+
+        logger.info("Inference input shape: %s (Dialect: %s)", x.shape, dialect)
+        prediction = util.predict(x, video_path=video_path, history=history, dialect=dialect)
         logger.info("Prediction: %s", prediction)
+
+        # Update history
+        history.append(prediction)
+        if len(history) > 10:
+            history.pop(0)
+        request.session['translation_history'] = history
+
         return JsonResponse({'status': 'success', 'message': prediction})
 
     except Exception:
@@ -68,7 +79,10 @@ def upload_video(request):
 def index(request):
     # Pass CSRF token to the template for JavaScript fetch calls
     get_token(request)
+    # Reset translation history on main page load/refresh
+    request.session['translation_history'] = []
     return render(request, 'app/index.html')
+
 
 
 @require_POST
@@ -80,11 +94,12 @@ def smooth_sentence(request):
     try:
         data = json.loads(request.body)
         words = data.get('words', [])
+        dialect = data.get('dialect', 'Saudi Arabic Sign Language')
         if not words:
             return JsonResponse({'status': 'failed', 'message': 'No words provided.'}, status=400)
 
         from app.llm_util import smooth_sign_sentence
-        translation = smooth_sign_sentence(words)
+        translation = smooth_sign_sentence(words, dialect=dialect)
         return JsonResponse({
             'status': 'success',
             'arabic': translation['arabic'],
