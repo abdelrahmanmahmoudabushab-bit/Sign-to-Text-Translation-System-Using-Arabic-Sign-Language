@@ -13,23 +13,25 @@ def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model
     if not words_list:
         return {"arabic": "", "english": ""}
         
-    keywords_str = " ".join(words_list)
+    keywords_str = " -> ".join(words_list)
     
-    # Prompt instructing the LLM to output a clean JSON structure adapted to regional dialect grammar
     prompt = f"""
-Act as an expert sign language translator.
-You will be given a sequence of raw Arabic sign language keywords. 
-Your task is to:
-1. Reconstruct these keywords into a grammatically correct, natural, and polite spoken Arabic sentence in the specified regional dialect/language context: {dialect}.
-2. Translate that reconstructed sentence into a natural English sentence.
+[SYSTEM ROLE: Master Arabic Sign Language Translator & Computational Linguist]
+Your task is to convert a sequence of disjointed Arabic Sign Language (ArSL) sign glosses into a natural, grammatically correct spoken sentence in the targeted dialect: {dialect}.
 
-Input Keywords: {keywords_str}
-Selected Dialect/Sign Language Context: {dialect}
+Input Sign Sequence: [{keywords_str}]
+Target Dialect: {dialect}
 
-Output format MUST be a valid JSON object matching this structure EXACTLY (do not include markdown formatting or backticks):
+[TRANSLATION GUIDELINES]
+1. Reconstruct the raw keywords into a fluent, natural, and polite spoken sentence matching the grammatical syntax of {dialect}.
+2. Provide an accurate, idiomatic English translation of the reconstructed sentence.
+3. Do not add fictitious details not implied by the sign sequence.
+
+[OUTPUT SPECIFICATION]
+Return ONLY a valid JSON object matching this schema (no markdown, no backticks, no extra commentary):
 {{
-  "arabic": "reconstructed sentence in the target dialect here",
-  "english": "translated English sentence here"
+  "arabic": "Reconstructed fluent sentence in {dialect}",
+  "english": "Fluent English translation"
 }}
 """
 
@@ -41,24 +43,22 @@ Output format MUST be a valid JSON object matching this structure EXACTLY (do no
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.3 # Low temperature for consistent formatting
+                    "temperature": 0.2
                 }
             },
-            timeout=8 # Reasonable timeout for local SLMs on CPU/GPU
+            timeout=8
         )
         
         if response.status_code == 200:
             result = response.json()
             response_text = result.get("response", "").strip()
             
-            # Clean up potential markdown formatting block wrappers
             if response_text.startswith("```"):
                 response_text = response_text.split("```")[1]
                 if response_text.startswith("json"):
                     response_text = response_text[4:]
             response_text = response_text.strip()
             
-            # Parse the JSON output from the LLM
             data = json.loads(response_text)
             return {
                 "arabic": data.get("arabic", "").strip(),
@@ -68,7 +68,6 @@ Output format MUST be a valid JSON object matching this structure EXACTLY (do no
     except Exception as e:
         print(f"Ollama integration warning: {e}")
         
-    # Fallback if Ollama is not running or fails
     fallback_arabic = " ".join(words_list)
     return {
         "arabic": fallback_arabic,
@@ -88,7 +87,6 @@ def predict_sign_with_vlm(video_path: str, candidates: list, dialect: str = "Sau
     storyboard = generate_storyboard(video_path, grid_path)
     
     if not storyboard or not os.path.exists(storyboard):
-        # Fallback to top LSTM candidate if storyboard generation fails
         return candidates[0]
 
     try:
@@ -97,19 +95,21 @@ def predict_sign_with_vlm(video_path: str, candidates: list, dialect: str = "Sau
 
         formatted_candidates = ", ".join([f"'{c}'" for c in candidates])
         prompt = f"""
-Act as an expert Arabic Sign Language Master Translator ({dialect}).
-The attached image is a 2x3 sequential storyboard grid of a person performing a sign gesture.
-Your objective is to pick the EXACT correct sign from the candidate list below.
+[SYSTEM ROLE: Senior Computer Vision Analyst & Master Sign Language Expert ({dialect})]
+The attached image is a 2x3 sequential temporal grid (storyboard) capturing a person signing in real-time.
+Your goal is to inspect the visual evidence and select the SINGLE EXACT sign performed from the candidate list below.
 
-Ranked Candidates: [{formatted_candidates}]
-Selected Dialect: {dialect}
+Candidate Pool: [{formatted_candidates}]
+Selected Regional Dialect: {dialect}
 
-Visual Inspection Checklist:
-1. Contact location: Is the sign performed at the forehead, chest, chin, or open air?
-2. Handshape & Orientation: Are fingers extended, curved, or closed? Are palms facing inward, outward, or downward?
-3. Facial Action: Is there an eyebrow furrow, nod, or mouth movement corresponding to {dialect}?
+[4-STEP VISUAL EVALUATION PROTOCOL]
+Step 1. Body Contact Zone: Identify if the hand contacts or moves near the Forehead, Eye level, Mouth/Chin, Chest, or Open Space.
+Step 2. Hand Configuration: Observe finger extension, wrist tilt, and palm orientation across the 6 sequence frames.
+Step 3. Movement Trajectory: Determine if the motion is Circular, Linear (Up/Down/Side), Pulsing, or Stationary.
+Step 4. Facial Grammar: Check for eyebrow furrows, head tilts, mouth shapes, or eye movements unique to {dialect}.
 
-Response MUST contain ONLY the exact chosen word string from the Candidates list.
+[STRICT OUTPUT CONTRACT]
+Output ONLY the exact string of the winning candidate word from the Candidate Pool. Do NOT include punctuation, explanations, or backticks.
 """
 
         response = requests.post(
@@ -129,7 +129,6 @@ Response MUST contain ONLY the exact chosen word string from the Candidates list
 
         if response.status_code == 200:
             vlm_response = response.json().get("response", "").strip()
-            # Strict candidate matching — accept ONLY words explicitly present in candidates
             for candidate in candidates:
                 cand_clean = candidate.strip()
                 if cand_clean and cand_clean in vlm_response:
@@ -137,7 +136,6 @@ Response MUST contain ONLY the exact chosen word string from the Candidates list
     except Exception as e:
         print(f"VLM inference warning: {e}")
 
-    # If VLM output didn't contain any candidate, fall back to top LSTM candidate
     return candidates[0]
 
 
@@ -147,21 +145,26 @@ def debate_and_decide(pred_lstm: str, lstm_confidence: float, pred_vlm: str, his
     between the LSTM model and the VLM model.
     """
     prompt = f"""
-Act as an expert Arabic Sign Language Translation Judge specializing in: {dialect}.
-Two AI model pipelines disagree on a gesture prediction and need you to resolve the debate based on the semantic rules of {dialect}.
+[SYSTEM ROLE: Chief Sign Language AI Arbitrator ({dialect})]
+Two specialized AI perception models have generated conflicting predictions for a gesture. Your task is to resolve the debate and select the correct sign based on statistical confidence, visual evidence, and semantic context in {dialect}.
 
-Previous Translated Words Context: {history}
-Selected Dialect/Sign Language Context: {dialect}
+Contextual History (Previous Words): {history}
+Regional Dialect: {dialect}
 
-Candidate 1 (LSTM coordinate tracking): "{pred_lstm}" (Confidence: {int(lstm_confidence * 100)}%)
-Candidate 2 (VLM storyboard visual): "{pred_vlm}"
+Disagreeing Models:
+- Model A (Coordinate Tracking LSTM): "{pred_lstm}" (Confidence: {int(lstm_confidence * 100)}%)
+- Model B (Storyboard Vision VLM): "{pred_vlm}"
 
-CRITICAL RULE: You MUST choose EXACTLY ONE of the two candidate words above ("{pred_lstm}" OR "{pred_vlm}"). DO NOT invent or generate any other word.
+[ARBITRATION PROTOCOL]
+1. Evaluate semantic continuity: Which candidate makes natural linguistic sense following the sequence {history}?
+2. If Model A's coordinate confidence is low (< 60%), prioritize Model B's direct visual evidence.
+3. You MUST pick strictly Candidate 1 ("{pred_lstm}") OR Candidate 2 ("{pred_vlm}"). DO NOT invent any third option.
 
-Output your decision strictly as a valid JSON object matching this structure (no backticks, no markdown):
+[OUTPUT FORMAT CONTRACT]
+Return ONLY a valid JSON object matching this exact structure:
 {{
-  "decision": "{pred_vlm}",
-  "reasoning": "one-line explanation here"
+  "decision": "insert chosen word strictly matching {pred_lstm} or {pred_vlm}",
+  "reasoning": "one-line concise justification"
 }}
 """
     try:
@@ -172,7 +175,7 @@ Output your decision strictly as a valid JSON object matching this structure (no
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.0,  # Deterministic decoding
+                    "temperature": 0.0,  # Zero-hallucination deterministic decoding
                     "top_p": 0.1
                 }
             },
@@ -189,7 +192,6 @@ Output your decision strictly as a valid JSON object matching this structure (no
             data = json.loads(response_text)
             decided_word = data.get("decision", "").strip()
             
-            # Strict verification: MUST be one of the two input candidates
             if decided_word == pred_lstm:
                 print(f"Judge Agent Decision: {pred_lstm} (Reason: {data.get('reasoning')})")
                 return pred_lstm
@@ -199,6 +201,5 @@ Output your decision strictly as a valid JSON object matching this structure (no
     except Exception as e:
         print(f"Judge Agent debate failed: {e}")
 
-    # Default to VLM if high confidence or debate parse fails
     return pred_vlm if lstm_confidence < 0.6 else pred_lstm
 
