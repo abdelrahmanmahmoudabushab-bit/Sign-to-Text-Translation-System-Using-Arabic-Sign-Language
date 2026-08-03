@@ -1083,6 +1083,28 @@
             smoothBtn.disabled = true;
         }
 
+        // ─── Kiosk 30-Second Inactivity Auto-Reset ────────────────────────────
+        let idleTimer = null;
+        const IDLE_TIMEOUT_MS = 30000; // 30 seconds
+
+        function resetIdleTimer() {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(onKioskIdle, IDLE_TIMEOUT_MS);
+        }
+
+        function onKioskIdle() {
+            if (collectedWords.length > 0 || (resultArea.value && resultArea.value !== '...') || smoothOutput.classList.contains('visible')) {
+                clearWords();
+                resultArea.value = '...';
+                showToast('Kiosk idle — session reset for next user', '🔄');
+            }
+        }
+
+        ['pointerdown', 'touchstart', 'mousemove', 'keydown', 'click'].forEach(evt => {
+            document.addEventListener(evt, resetIdleTimer, { passive: true });
+        });
+        resetIdleTimer();
+
         async function buildSentence() {
             if (collectedWords.length === 0) return;
 
