@@ -554,6 +554,58 @@
             font-weight: bold;
             box-shadow: 0 2px 0 #1f2937;
         }
+
+        /* Toast Popup Notification */
+        .toast-notification {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(17, 24, 39, 0.95);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #f8fafc;
+            padding: 12px 20px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .toast-notification.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .action-icon-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            outline: none;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+        .action-icon-btn:hover {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: rgba(56, 189, 248, 0.4);
+            color: var(--primary-light);
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
@@ -634,9 +686,15 @@
 
         <!-- Smoothed sentence output -->
         <div class="smooth-output" id="smoothOutput">
-            <div class="smooth-row">
-                <span class="lang-tag">AR</span>
-                <span class="lang-text" id="smoothArabic"></span>
+            <div class="smooth-row" style="justify-content: space-between;">
+                <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                    <span class="lang-tag">AR</span>
+                    <span class="lang-text" id="smoothArabic"></span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                    <button class="action-icon-btn" id="speakArabicBtn" title="Speak Arabic Translation">🔊</button>
+                    <button class="action-icon-btn" id="copyArabicBtn" title="Copy Text">📋</button>
+                </div>
             </div>
             <div class="smooth-row">
                 <span class="lang-tag">EN</span>
@@ -1031,6 +1089,70 @@
             }
         }
 
+        // ─── Toast & Audio Speech Helpers ─────────────────────────────────────
+        const speakBtn = $('#speakArabicBtn');
+        const copyBtn = $('#copyArabicBtn');
+        const toast = $('#toastNotification');
+        const toastIcon = $('#toastIcon');
+        const toastMsg = $('#toastMsg');
+
+        function showToast(message, icon = '✨') {
+            if (!toast) return;
+            toastIcon.innerText = icon;
+            toastMsg.innerText = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function speakText(text, lang = 'ar-SA') {
+            if (!text || !('speechSynthesis' in window)) {
+                showToast('Speech synthesis not supported on this browser', '⚠️');
+                return;
+            }
+            window.speechSynthesis.cancel(); // stop current audio
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = lang;
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+            showToast('Speaking translation...', '🔊');
+        }
+
+        if (speakBtn) {
+            speakBtn.addEventListener('click', () => {
+                const text = $('#smoothArabic').innerText || resultArea.value;
+                if (text && text !== '...') {
+                    speakText(text, 'ar-SA');
+                } else {
+                    showToast('No text available to speak', 'ℹ️');
+                }
+            });
+        }
+
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async () => {
+                const text = $('#smoothArabic').innerText || resultArea.value;
+                if (text && text !== '...') {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        showToast('Translation copied to clipboard!', '📋');
+                    } catch (err) {
+                        showToast('Failed to copy', '❌');
+                    }
+                } else {
+                    showToast('No text to copy', 'ℹ️');
+                }
+            });
+        }
+
+        // Auto-toast on word collection
+        const originalAddWord = addWord;
+        addWord = function(word) {
+            originalAddWord(word);
+            showToast(`Sign detected: "${word}"`, '🤟');
+        };
+
         // ─── UI Helpers ───────────────────────────────────────────────
         function setLoading(loading, message = '') {
             if (loading) {
@@ -1046,5 +1168,11 @@
         // ─── Initialize ───────────────────────────────────────────────
         init(constraints);
     </script>
+
+    <!-- Toast Notification Element -->
+    <div class="toast-notification" id="toastNotification">
+        <span id="toastIcon">✨</span>
+        <span id="toastMsg">Ready</span>
+    </div>
 </body>
 </html>
