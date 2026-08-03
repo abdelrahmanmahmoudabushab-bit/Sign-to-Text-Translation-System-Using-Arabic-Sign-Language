@@ -600,20 +600,47 @@
             flex-shrink: 0;
         }
 
-        .action-icon-btn:hover {
-            background: rgba(56, 189, 248, 0.2);
-            border-color: rgba(56, 189, 248, 0.4);
-            color: var(--primary-light);
-            transform: scale(1.05);
+        /* Touch Kiosk Optimizations */
+        * {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button {
+            min-height: 54px;
+        }
+
+        button:active:not(:disabled), .action-icon-btn:active {
+            transform: scale(0.95) !important;
+            opacity: 0.9;
+        }
+
+        .action-icon-btn {
+            width: 46px;
+            height: 46px;
+            font-size: 1.15rem;
+            border-radius: 12px;
+        }
+
+        .dialect-dropdown {
+            min-height: 44px;
+            font-size: 0.95rem;
+            padding: 8px 14px;
+            border-radius: 10px;
         }
     </style>
 </head>
 <body>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h1 style="margin-bottom: 0;">Signo Arabic Translation System</h1>
-            <a href="/dashboard/" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; text-decoration: none; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(56, 189, 248, 0.25)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)'">
-                <span>📊 Live Dashboard</span>
-            </a>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+            <h1 style="margin-bottom: 0;">Signo Kiosk Translation System</h1>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="kioskFullscreenBtn" style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; padding: 8px 14px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; min-height: auto; width: auto; flex: none;">
+                    <span>⛶ Kiosk Fullscreen</span>
+                </button>
+                <a href="/dashboard/" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; text-decoration: none; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(56, 189, 248, 0.25)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)'">
+                    <span>📊 Live Dashboard</span>
+                </a>
+            </div>
         </div>
 
         <div class="video-wrapper">
@@ -1152,6 +1179,40 @@
             originalAddWord(word);
             showToast(`Sign detected: "${word}"`, '🤟');
         };
+
+        // ─── Kiosk Screen Wake Lock & Fullscreen ──────────────────────────────
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Kiosk Screen Wake Lock active');
+                }
+            } catch (err) {
+                console.warn('Wake Lock error:', err);
+            }
+        }
+        requestWakeLock();
+        document.addEventListener('visibilitychange', () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        });
+
+        const kioskBtn = $('#kioskFullscreenBtn');
+        if (kioskBtn) {
+            kioskBtn.addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().then(() => {
+                        showToast('Entered Kiosk Fullscreen Mode', '⛶');
+                    }).catch(err => console.warn(err));
+                } else {
+                    document.exitFullscreen().then(() => {
+                        showToast('Exited Fullscreen', '⛶');
+                    }).catch(err => console.warn(err));
+                }
+            });
+        }
 
         // ─── UI Helpers ───────────────────────────────────────────────
         function setLoading(loading, message = '') {
