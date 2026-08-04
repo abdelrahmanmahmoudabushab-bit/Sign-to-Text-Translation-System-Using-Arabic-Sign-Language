@@ -62,10 +62,14 @@ def _init():
             logger.info("onnxruntime not installed. Falling back to TensorFlow Keras.")
 
     if _model is None and os.path.exists(keras_path):
-        import tensorflow as tf
-        model_obj = tf.keras.models.load_model(keras_path)
+        try:
+            import tf_keras as keras_loader
+            model_obj = keras_loader.models.load_model(keras_path)
+        except Exception:
+            import tensorflow as tf
+            model_obj = tf.keras.models.load_model(keras_path)
         _model = {"type": "keras", "model": model_obj}
-        logger.info("Model loaded from %s (TensorFlow Keras)", keras_path)
+        logger.info("Model loaded from %s (Keras Engine)", keras_path)
     elif _model is None:
         logger.warning("No model file (keras, onnx, or engine) found at %s", keras_path)
 
