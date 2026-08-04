@@ -63,9 +63,10 @@ def _init():
 
     if _model is None and os.path.exists(keras_path):
         import tensorflow as tf
-        if hasattr(tf, "__internal__") and not hasattr(tf.__internal__, "register_load_context_function"):
-            if hasattr(tf.__internal__, "register_call_context_function"):
-                tf.__internal__.register_load_context_function = tf.__internal__.register_call_context_function
+        # Patch NVIDIA Jetson TensorFlow internal namespace for Keras 2 compatibility
+        for target in (getattr(tf, "__internal__", None), getattr(getattr(tf, "compat", None), "v2", None) and getattr(tf.compat.v2, "__internal__", None)):
+            if target and not hasattr(target, "register_load_context_function"):
+                setattr(target, "register_load_context_function", getattr(target, "register_call_context_function", lambda x: None))
         try:
             import tf_keras as keras_loader
             model_obj = keras_loader.models.load_model(keras_path)
