@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 
 from app import util
 from app.DataLoader import DataLoader
@@ -18,6 +19,7 @@ MAX_VIDEO_SIZE = 30 * 1024 * 1024  # 30 MB
 ALLOWED_VIDEO_MIMES = {'video/webm', 'video/mp4', 'video/ogg', 'video/x-matroska'}
 
 
+@csrf_exempt
 @require_POST
 def upload_video(request):
     try:
@@ -115,6 +117,7 @@ def index(request):
 
 
 
+@csrf_exempt
 @require_POST
 def smooth_sentence(request):
     """
@@ -156,6 +159,7 @@ def api_telemetry(request):
     return JsonResponse(get_telemetry_snapshot())
 
 
+@csrf_exempt
 @require_POST
 def api_clear_logs(request):
     """Reset telemetry history logs."""
