@@ -7,6 +7,9 @@
     <title>Signo — Arabic Sign Language Translation</title>
     <!-- Import Outfit Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Kufi+Arabic:wght@400;700&display=swap" rel="stylesheet">
+    <!-- MediaPipe Client-Side Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <style>
         :root {
             --bg-gradient: linear-gradient(135deg, #fff5f8 0%, #fce7f3 50%, #fbcfe8 100%);
@@ -84,6 +87,17 @@
             height: 100%;
             object-fit: cover;
             transform: scaleX(-1);
+        }
+
+        #feedbackCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform: scaleX(-1); /* align mirrored canvas with video */
+            z-index: 2;
         }
 
         .recording-indicator {
@@ -649,6 +663,7 @@
 
         <div class="video-wrapper">
             <video id="myVideo" autoplay muted aria-label="Webcam feed for sign language recognition"></video>
+            <canvas id="feedbackCanvas"></canvas>
             <div class="recording-indicator" id="recordingIndicator" aria-live="polite">
                 <div class="recording-dot"></div>
                 <span>RECORDING</span>
@@ -788,6 +803,8 @@
         const continuousToggle = $('#continuousToggle');
         const statusIndicator = $('#statusIndicator');
         const dialectSelect = $('#dialectSelect');
+        const feedbackCanvas = $('#feedbackCanvas');
+        const canvasCtx = feedbackCanvas.getContext('2d');
 
         const constraints = {
             audio: false,
@@ -1254,6 +1271,118 @@
 
         // ─── Initialize ───────────────────────────────────────────────
         init(constraints);
+
+        // ─── Client-side MediaPipe Holistic & Visual Feedback ─────────────────
+        let holistic = null;
+        let isHolisticRunning = false;
+
+        function onHolisticResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, feedbackCanvas.width, feedbackCanvas.height);
+
+            // Match canvas resolution with video stream resolution
+            const videoEl = $('#myVideo');
+            if (videoEl.videoWidth && feedbackCanvas.width !== videoEl.videoWidth) {
+                feedbackCanvas.width = videoEl.videoWidth;
+                feedbackCanvas.height = videoEl.videoHeight;
+            }
+
+            // 1. Draw Face Contours (Light pink/translucent mesh for aesthetic feel)
+            if (results.faceLandmarks) {
+                drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_CONTOURS, {
+                    color: 'rgba(244, 114, 182, 0.4)', // transparent primary pink
+                    lineWidth: 1
+                });
+            }
+
+            // 2. Draw Left Hand Tracking
+            if (results.leftHandLandmarks) {
+                drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
+                    color: '#ec4899', // primary pink connectors
+                    lineWidth: 3
+                });
+                drawLandmarks(canvasCtx, results.leftHandLandmarks, {
+                    color: '#ffffff', // white dots
+                    fillColor: '#f43f5e', // red fill
+                    lineWidth: 1,
+                    radius: 3
+                });
+            }
+
+            // 3. Draw Right Hand Tracking
+            if (results.rightHandLandmarks) {
+                drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
+                    color: '#ec4899',
+                    lineWidth: 3
+                });
+                drawLandmarks(canvasCtx, results.rightHandLandmarks, {
+                    color: '#ffffff',
+                    fillColor: '#f43f5e',
+                    lineWidth: 1,
+                    radius: 3
+                });
+            }
+
+            // 4. Draw simple pose connectors (shoulders/arms only to keep it clean)
+            if (results.poseLandmarks) {
+                // Connection indices: shoulders (11, 12), elbows (13, 14), wrists (15, 16)
+                const poseConnections = [
+                    [11, 12], [11, 13], [12, 14], [13, 15], [14, 16]
+                ];
+                drawConnectors(canvasCtx, results.poseLandmarks, poseConnections, {
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    lineWidth: 2
+                });
+            }
+
+            canvasCtx.restore();
+        }
+
+        async function startHolisticFeedback() {
+            try {
+                if (typeof Holistic === 'undefined') {
+                    console.warn('MediaPipe Holistic library not loaded yet');
+                    return;
+                }
+                holistic = new Holistic({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
+                });
+                holistic.setOptions({
+                    modelComplexity: 1,
+                    smoothLandmarks: true,
+                    enableSegmentation: false,
+                    refineFaceLandmarks: false,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                holistic.onResults(onHolisticResults);
+                isHolisticRunning = true;
+                console.log('Client-side MediaPipe Holistic feedback active');
+                
+                // Start processing loop
+                const videoEl = $('#myVideo');
+                async function processFrame() {
+                    if (isHolisticRunning && videoEl.srcObject && !videoEl.paused && !videoEl.ended) {
+                        try {
+                            await holistic.send({ image: videoEl });
+                        } catch (err) {
+                            console.warn("MediaPipe Holistic send error:", err);
+                        }
+                    }
+                    requestAnimationFrame(processFrame);
+                }
+                processFrame();
+            } catch (error) {
+                console.error('Failed to init local MediaPipe Holistic:', error);
+            }
+        }
+
+        // Trigger local feedback when video feed plays
+        $('#myVideo').addEventListener('play', () => {
+            if (!isHolisticRunning) {
+                startHolisticFeedback();
+            }
+        });
     </script>
 
     <!-- Toast Notification Element -->
