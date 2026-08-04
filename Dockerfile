@@ -7,7 +7,7 @@
 # ============================================================================
 
 # ---------- Stage 1: Runtime Image ----------
-FROM nvcr.io/nvidia/l4t-tensorflow:r36.4.0-tf2.18-py3 AS runtime
+FROM nvcr.io/nvidia/l4t-ml:r36.2.0-py3 AS runtime
 
 # Metadata
 LABEL maintainer="Abdelrahman <signo-project>"
@@ -49,19 +49,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 
 # Install production Python packages
-# Note: TensorFlow is already in the base image, so we skip it
-# and install only the remaining dependencies
+# Note: TensorFlow, PyTorch, NumPy, OpenCV, and Scikit-Learn are pre-installed in l4t-ml
 RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir \
     django==5.2.16 \
     gunicorn==23.0.0 \
     mediapipe==1.0.0 \
-    scikit-learn==1.9.0 \
-    opencv-python-headless==4.11.0.86 \
-    numpy==1.26.4 \
     Pillow==12.3.0 \
     requests==2.34.2 \
-    psutil>=5.9.0
+    psutil>=5.9.0 \
+    deep-translator==1.11.4
 
 # ─── Application Code ───────────────────────────────────────────────────────
 COPY . .
