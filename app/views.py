@@ -9,6 +9,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from app import util
+from app.DataLoader import DataLoader
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ def upload_video(request):
                 destination.write(chunk)
 
         # Extract keypoints and predict
-        x = util.DataLoader.DataLoader.load_inference_data(video_path)
+        x = DataLoader.load_inference_data(video_path)
         if x is None:
             return JsonResponse({'status': 'failed', 'message': 'Could not process video frames.'})
 
