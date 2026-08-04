@@ -62,11 +62,14 @@ def _init():
             logger.info("onnxruntime not installed. Falling back to TensorFlow Keras.")
 
     if _model is None and os.path.exists(keras_path):
+        import tensorflow as tf
+        if hasattr(tf, "__internal__") and not hasattr(tf.__internal__, "register_load_context_function"):
+            if hasattr(tf.__internal__, "register_call_context_function"):
+                tf.__internal__.register_load_context_function = tf.__internal__.register_call_context_function
         try:
             import tf_keras as keras_loader
             model_obj = keras_loader.models.load_model(keras_path)
         except Exception:
-            import tensorflow as tf
             model_obj = tf.keras.models.load_model(keras_path)
         _model = {"type": "keras", "model": model_obj}
         logger.info("Model loaded from %s (Keras Engine)", keras_path)
