@@ -6,7 +6,7 @@ After=network.target
 User=jetson
 WorkingDirectory=/home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language
 Environment="DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.100.60"
-ExecStart=/home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language/.venv/bin/gunicorn --workers 3 --bind 0.0.0.0:8000 pbl.wsgi:application
+ExecStart=/home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language/.venv/bin/gunicorn --workers 3 --threads 2 --timeout 120 --bind 0.0.0.0:8000 pbl.wsgi:application
 Restart=always
 
 [Install]
