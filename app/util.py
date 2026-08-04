@@ -69,9 +69,9 @@ def _init():
                 setattr(target, "register_load_context_function", getattr(target, "register_call_context_function", lambda x: None))
         try:
             import tf_keras as keras_loader
-            model_obj = keras_loader.models.load_model(keras_path)
+            model_obj = keras_loader.models.load_model(keras_path, compile=False)
         except Exception:
-            model_obj = tf.keras.models.load_model(keras_path)
+            model_obj = tf.keras.models.load_model(keras_path, compile=False)
         _model = {"type": "keras", "model": model_obj}
         logger.info("Model loaded from %s (Keras Engine)", keras_path)
     elif _model is None:
