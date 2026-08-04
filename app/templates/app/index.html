@@ -652,8 +652,11 @@
                 <h1 style="margin-bottom: 0; font-size: 2.2rem; font-weight: 800; background: linear-gradient(to right, #ec4899, #f43f5e); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Signo Kiosk</h1>
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="kioskReloadBtn" style="background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.3); color: #ec4899; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; min-height: auto; width: auto; flex: none; cursor: pointer;">
+                    <span>🔄 Reload</span>
+                </button>
                 <button id="kioskFullscreenBtn" style="background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.3); color: #ec4899; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; min-height: auto; width: auto; flex: none;">
-                    <span>⛶ Kiosk Fullscreen</span>
+                    <span>⛶ Fullscreen</span>
                 </button>
                 <a href="/dashboard/" style="background: rgba(236, 72, 153, 0.1); border: 1px solid rgba(236, 72, 153, 0.3); color: #ec4899; text-decoration: none; padding: 8px 16px; border-radius: 12px; font-weight: 600; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(236, 72, 153, 0.2)'" onmouseout="this.style.background='rgba(236, 72, 153, 0.1)'">
                     <span>📊 Live Dashboard</span>
@@ -1254,6 +1257,13 @@
                         showToast('Exited Fullscreen', '⛶');
                     }).catch(err => console.warn(err));
                 }
+            });
+        }
+
+        const reloadBtn = $('#kioskReloadBtn');
+        if (reloadBtn) {
+            reloadBtn.addEventListener('click', () => {
+                window.location.reload();
             });
         }
 
