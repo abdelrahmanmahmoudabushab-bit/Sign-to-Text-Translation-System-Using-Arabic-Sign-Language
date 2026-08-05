@@ -420,8 +420,8 @@ def predict(x: np.ndarray = None, video_path: str = None, history: list = None, 
     t_lstm.start()
     t_vlm.start()
 
-    t_lstm.join(timeout=15.0)
-    t_vlm.join(timeout=15.0)
+    t_lstm.join(timeout=45.0)
+    t_vlm.join(timeout=45.0)
 
     if not lstm_result:
         logger.error("LSTM parallel pipeline failed or timed out.")
