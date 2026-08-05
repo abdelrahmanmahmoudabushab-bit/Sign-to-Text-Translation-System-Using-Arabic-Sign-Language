@@ -14,4 +14,7 @@ urlpatterns = [
     path('api/developer_logs/', views.api_developer_logs, name='api_developer_logs'),
     path('api/control_jetson/', views.api_control_jetson, name='api_control_jetson'),
     path('api/ollama_status/', views.api_ollama_status, name='api_ollama_status'),
+    path('api/sessions/', views.api_sessions, name='api_sessions'),
+    path('api/sessions/<int:session_id>/', views.api_sessions, name='api_session_delete'),
+    path('history/', views.history, name='history'),
 ]

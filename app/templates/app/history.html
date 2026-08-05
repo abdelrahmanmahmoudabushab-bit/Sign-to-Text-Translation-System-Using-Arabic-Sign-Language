@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signo — Translation History</title>
+    <meta name="description" content="Browse and replay all saved Arabic Sign Language translation sessions.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #0b0f1a;
+            --surface: rgba(255,255,255,0.04);
+            --glass-border: rgba(255,255,255,0.08);
+            --primary: #ec4899;
+            --primary-soft: rgba(236,72,153,0.15);
+            --accent: #8b5cf6;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --radius: 16px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            background-image:
+                radial-gradient(ellipse 80% 50% at 20% 10%, rgba(139,92,246,0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(236,72,153,0.06) 0%, transparent 60%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        /* ─── Header ─── */
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .page-header h1 {
+            font-size: 1.9rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 18px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-decoration: none;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: var(--primary-soft);
+            border-color: rgba(236,72,153,0.3);
+            color: var(--primary);
+        }
+
+        /* ─── Stats Bar ─── */
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+
+        .stat-chip {
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stat-chip .stat-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-chip .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* ─── Toolbar ─── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px 16px;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-family: 'Outfit', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-box:focus { border-color: rgba(236,72,153,0.4); }
+        .search-box::placeholder { color: var(--text-muted); }
+
+        .toolbar-btn {
+            padding: 10px 18px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            border: 1px solid var(--glass-border);
+            background: var(--surface);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .toolbar-btn:hover {
+            background: var(--primary-soft);
+            border-color: rgba(236,72,153,0.35);
+            color: var(--primary);
+        }
+
+        .toolbar-btn.danger:hover {
+            background: rgba(239,68,68,0.12);
+            border-color: rgba(239,68,68,0.35);
+            color: var(--danger);
+        }
+
+        /* ─── Session Cards Grid ─── */
+        #sessionsGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+            gap: 20px;
+        }
+
+        .session-card {
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            transition: border-color 0.25s, transform 0.2s;
+            animation: fadeSlideIn 0.35s ease both;
+        }
+
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .session-card:hover {
+            border-color: rgba(236,72,153,0.25);
+            transform: translateY(-2px);
+        }
+
+        /* Card header row */
+        .card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .card-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .card-time {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        .dialect-tag {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(139,92,246,0.15);
+            border: 1px solid rgba(139,92,246,0.25);
+            color: #a78bfa;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .delete-session-btn {
+            background: transparent;
+            border: 1px solid rgba(239,68,68,0.2);
+            color: rgba(239,68,68,0.5);
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .delete-session-btn:hover {
+            background: rgba(239,68,68,0.12);
+            border-color: rgba(239,68,68,0.5);
+            color: var(--danger);
+        }
+
+        /* Arabic/English sentence output */
+        .sentence-block {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sentence-ar {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text);
+            direction: rtl;
+            text-align: right;
+            line-height: 1.6;
+        }
+
+        .sentence-en {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            direction: ltr;
+            text-align: left;
+        }
+
+        /* Clips accordion */
+        .clips-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            user-select: none;
+            border: none;
+            background: none;
+            padding: 0;
+        }
+
+        .clips-toggle:hover { color: var(--primary); }
+
+        .clips-toggle .clip-count-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            background: var(--primary-soft);
+            border: 1px solid rgba(236,72,153,0.25);
+            border-radius: 20px;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .clips-list {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .clips-list.open { display: flex; }
+
+        .clip-row {
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .clip-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .gesture-badge {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--text);
+            background: rgba(236,72,153,0.1);
+            border: 1px solid rgba(236,72,153,0.2);
+            padding: 3px 10px;
+            border-radius: 8px;
+        }
+
+        .conf-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .clip-time {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-left: auto;
+        }
+
+        video.clip-video {
+            width: 100%;
+            max-height: 180px;
+            border-radius: 8px;
+            background: #000;
+            object-fit: cover;
+        }
+
+        /* ─── Empty State ─── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 24px;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            opacity: 0.4;
+        }
+
+        /* ─── Loading spinner ─── */
+        .loading-ring {
+            width: 36px;
+            height: 36px;
+            border: 3px solid rgba(236,72,153,0.2);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 60px auto;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── Pagination ─── */
+        .pagination {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 32px;
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            padding: 8px 18px;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            background: var(--surface);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.88rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover, .page-btn.active {
+            background: var(--primary-soft);
+            border-color: rgba(236,72,153,0.35);
+            color: var(--primary);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* ─── Toast ─── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: rgba(15,23,42,0.95);
+            border: 1px solid rgba(236,72,153,0.35);
+            color: var(--text);
+            padding: 12px 20px;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            opacity: 0;
+            transform: translateY(16px);
+            transition: all 0.3s ease;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="page-header">
+        <div style="display:flex; align-items:center; gap:14px;">
+            <div style="width:42px;height:42px;background:linear-gradient(135deg,#ec4899,#8b5cf6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;">🗂️</div>
+            <div>
+                <h1>Translation History</h1>
+                <span style="font-size:0.8rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;">Saved Sessions & Clips</span>
+            </div>
+        </div>
+        <div class="header-links">
+            <a href="/" class="nav-btn">🤟 Kiosk</a>
+            <a href="/dashboard/" class="nav-btn">📊 Dashboard</a>
+            <a href="/admin/app/translationsession/" class="nav-btn" target="_blank">⚙️ Admin</a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow">
+        <div class="stat-chip">
+            <span class="stat-value" id="statTotal">—</span>
+            <span class="stat-label">Total Sessions</span>
+        </div>
+        <div class="stat-chip">
+            <span class="stat-value" id="statPage">—</span>
+            <span class="stat-label">Showing</span>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <input class="search-box" id="searchBox" type="text" placeholder="🔍  Search by Arabic or English sentence..." />
+        <button class="toolbar-btn" onclick="loadSessions(1)">🔄 Refresh</button>
+        <button class="toolbar-btn danger" id="purgeBtn" onclick="confirmPurge()">🗑️ Purge All</button>
+    </div>
+
+    <!-- Grid -->
+    <div id="sessionsGrid">
+        <div class="loading-ring"></div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const PER_PAGE = 12;
+        let currentPage = 1;
+        let allSessions = [];
+        let filteredSessions = [];
+
+        // ─── Load Sessions ───────────────────────────────────────────────
+        async function loadSessions(page = 1) {
+            currentPage = page;
+            const grid = document.getElementById('sessionsGrid');
+            grid.innerHTML = '<div class="loading-ring"></div>';
+
+            try {
+                const res = await fetch(`/api/sessions/?page=${page}&per_page=${PER_PAGE}`);
+                const data = await res.json();
+
+                allSessions = data.sessions || [];
+                filteredSessions = allSessions;
+
+                document.getElementById('statTotal').textContent = data.total;
+                document.getElementById('statPage').textContent =
+                    `${allSessions.length} / ${data.total}`;
+
+                applyFilter();
+                buildPagination(data.total, page);
+
+            } catch (err) {
+                grid.innerHTML = `<div class="empty-state">
+                    <div class="empty-icon">⚠️</div>
+                    <p>Failed to load sessions. Is the server running?</p>
+                </div>`;
+            }
+        }
+
+        // ─── Filter ──────────────────────────────────────────────────────
+        document.getElementById('searchBox').addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            filteredSessions = q
+                ? allSessions.filter(s =>
+                    (s.arabic || '').toLowerCase().includes(q) ||
+                    (s.english || '').toLowerCase().includes(q) ||
+                    s.clips.some(c => (c.gesture || '').toLowerCase().includes(q))
+                )
+                : allSessions;
+            renderGrid(filteredSessions);
+        });
+
+        // ─── Render ──────────────────────────────────────────────────────
+        function applyFilter() {
+            const q = document.getElementById('searchBox').value.toLowerCase().trim();
+            filteredSessions = q
+                ? allSessions.filter(s =>
+                    (s.arabic || '').toLowerCase().includes(q) ||
+                    (s.english || '').toLowerCase().includes(q))
+                : allSessions;
+            renderGrid(filteredSessions);
+        }
+
+        function renderGrid(sessions) {
+            const grid = document.getElementById('sessionsGrid');
+            if (!sessions.length) {
+                grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+                    <div class="empty-icon">🤟</div>
+                    <p style="font-size:1rem;font-weight:600;">No sessions found</p>
+                    <p style="font-size:0.88rem;">Translate some signs on the kiosk to see them here.</p>
+                </div>`;
+                return;
+            }
+
+            grid.innerHTML = sessions.map((s, i) => `
+                <div class="session-card" style="animation-delay:${i * 0.04}s" id="card-${s.id}">
+                    <div class="card-header">
+                        <div class="card-meta">
+                            <span class="card-time">🕐 ${s.created_at}</span>
+                            <span class="dialect-tag">${s.dialect}</span>
+                        </div>
+                        <button class="delete-session-btn" onclick="deleteSession(${s.id})" title="Delete this session">🗑</button>
+                    </div>
+
+                    ${s.arabic || s.english ? `
+                    <div class="sentence-block">
+                        ${s.arabic ? `<div class="sentence-ar">${escHtml(s.arabic)}</div>` : ''}
+                        ${s.english ? `<div class="sentence-en">${escHtml(s.english)}</div>` : ''}
+                    </div>` : `<div style="color:var(--text-muted);font-size:0.88rem;font-style:italic;">No sentence built for this session.</div>`}
+
+                    ${s.clips.length ? `
+                    <button class="clips-toggle" onclick="toggleClips(${s.id})">
+                        <span>▶ Show Gesture Clips</span>
+                        <span class="clip-count-badge">${s.clip_count} clips</span>
+                    </button>
+                    <div class="clips-list" id="clips-${s.id}">
+                        ${s.clips.map(c => `
+                        <div class="clip-row">
+                            <div class="clip-info">
+                                <span class="gesture-badge">${escHtml(c.gesture || '?')}</span>
+                                <span class="conf-text">Confidence: ${c.confidence}%</span>
+                                <span class="clip-time">${c.created_at}</span>
+                            </div>
+                            ${c.video_url ? `<video class="clip-video" controls preload="none" src="${c.video_url}"></video>` : ''}
+                        </div>`).join('')}
+                    </div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function toggleClips(sessionId) {
+            const list = document.getElementById(`clips-${sessionId}`);
+            if (!list) return;
+            list.classList.toggle('open');
+            const btn = list.previousElementSibling;
+            if (btn) {
+                const isOpen = list.classList.contains('open');
+                btn.querySelector('span').textContent = isOpen ? '▼ Hide Gesture Clips' : '▶ Show Gesture Clips';
+            }
+        }
+
+        // ─── Delete ──────────────────────────────────────────────────────
+        async function deleteSession(id) {
+            if (!confirm('Delete this session and all its video clips?')) return;
+            try {
+                const res = await fetch(`/api/sessions/${id}/`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    document.getElementById(`card-${id}`)?.remove();
+                    showToast('Session deleted ✓');
+                    loadSessions(currentPage);
+                } else {
+                    showToast('Delete failed: ' + data.message);
+                }
+            } catch {
+                showToast('Network error during delete');
+            }
+        }
+
+        async function confirmPurge() {
+            if (!confirm('⚠️ Delete ALL sessions and all video clips permanently?')) return;
+            const sessions = [...allSessions];
+            let deleted = 0;
+            for (const s of sessions) {
+                try {
+                    await fetch(`/api/sessions/${s.id}/`, { method: 'DELETE' });
+                    deleted++;
+                } catch { /* continue */ }
+            }
+            showToast(`Purged ${deleted} sessions ✓`);
+            loadSessions(1);
+        }
+
+        // ─── Pagination ──────────────────────────────────────────────────
+        function buildPagination(total, currentPg) {
+            const totalPages = Math.ceil(total / PER_PAGE);
+            const pag = document.getElementById('pagination');
+            if (totalPages <= 1) { pag.innerHTML = ''; return; }
+
+            let html = `<button class="page-btn" ${currentPg === 1 ? 'disabled' : ''} onclick="loadSessions(${currentPg - 1})">← Prev</button>`;
+            for (let p = 1; p <= totalPages; p++) {
+                if (p === currentPg || p === 1 || p === totalPages || Math.abs(p - currentPg) <= 1) {
+                    html += `<button class="page-btn ${p === currentPg ? 'active' : ''}" onclick="loadSessions(${p})">${p}</button>`;
+                } else if (Math.abs(p - currentPg) === 2) {
+                    html += `<span style="color:var(--text-muted);align-self:center;">…</span>`;
+                }
+            }
+            html += `<button class="page-btn" ${currentPg === totalPages ? 'disabled' : ''} onclick="loadSessions(${currentPg + 1})">Next →</button>`;
+            pag.innerHTML = html;
+        }
+
+        // ─── Helpers ─────────────────────────────────────────────────────
+        function escHtml(str) {
+            const d = document.createElement('div');
+            d.appendChild(document.createTextNode(str));
+            return d.innerHTML;
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        // ─── Init ────────────────────────────────────────────────────────
+        loadSessions(1);
+    </script>
+</body>
+</html>

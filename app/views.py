@@ -71,6 +71,30 @@ def upload_video(request):
             history.pop(0)
         request.session['translation_history'] = history
 
+        # ── Save clip to database ────────────────────────────────────────────
+        try:
+            from app.models import TranslationClip
+            from django.core.files import File
+
+            # Move clip into MEDIA_ROOT/sessions/ via Django's FileField
+            with open(video_path, 'rb') as f:
+                clip = TranslationClip(
+                    gesture=prediction or '',
+                    dialect=dialect,
+                    confidence=0.0,   # placeholder; update if model returns score
+                )
+                clip.video.save(os.path.basename(video_path), File(f), save=True)
+
+            # Track clip IDs in session for sentence linking
+            pending = request.session.get('pending_clip_ids', [])
+            pending.append(clip.pk)
+            if len(pending) > 50:            # guard against runaway sessions
+                pending = pending[-50:]
+            request.session['pending_clip_ids'] = pending
+            logger.info("Saved TranslationClip pk=%s gesture='%s'", clip.pk, prediction)
+        except Exception as db_err:
+            logger.warning("Could not save clip to DB: %s", db_err)
+
         # On-Device Self-Learning Data Collector: Archive clips for batch retraining
         if not prediction or prediction == "?":
             try:
@@ -79,7 +103,7 @@ def upload_video(request):
                 sample_id = f"sample_{int(time.time()*1000)}"
                 archived_clip = os.path.join(new_signs_dir, f"{sample_id}.webm")
                 shutil.copyfile(video_path, archived_clip)
-                
+
                 meta_path = os.path.join(new_signs_dir, f"{sample_id}.json")
                 with open(meta_path, 'w', encoding='utf-8') as mf:
                     json.dump({
@@ -92,7 +116,7 @@ def upload_video(request):
             except Exception as e:
                 logger.warning("Failed to save self-learning clip: %s", e)
 
-        # Clean up temporary video file after prediction
+        # Clean up the temp upload file (the DB copy is already saved separately)
         try:
             os.remove(video_path)
         except OSError:
@@ -101,6 +125,7 @@ def upload_video(request):
         return JsonResponse({
             'status': 'success',
             'message': prediction,
+            'clip_id': clip.pk if 'clip' in dir() else None,
             'dialect': dialect,
             'history_count': len(history),
             'timestamp': time.strftime('%H:%M:%S')
@@ -129,6 +154,7 @@ def smooth_sentence(request):
     """
     POST view accepting a list of raw sign words, returning
     smoothed Arabic and English translations via local Ollama.
+    Also saves a TranslationSession linking the clips collected this session.
     """
     try:
         data = json.loads(request.body)
@@ -139,10 +165,33 @@ def smooth_sentence(request):
 
         from app.llm_util import smooth_sign_sentence
         translation = smooth_sign_sentence(words, dialect=dialect)
+
+        # ── Save session to database ─────────────────────────────────────────
+        session_id = None
+        try:
+            from app.models import TranslationClip, TranslationSession
+            session = TranslationSession.objects.create(
+                arabic_sentence=translation.get('arabic', ''),
+                english_sentence=translation.get('english', ''),
+                dialect=dialect,
+            )
+            # Link the clips collected during this browser session
+            pending_ids = request.session.get('pending_clip_ids', [])
+            if pending_ids:
+                clips = TranslationClip.objects.filter(pk__in=pending_ids)
+                session.clips.set(clips)
+            # Clear pending list for the next sentence
+            request.session['pending_clip_ids'] = []
+            session_id = session.pk
+            logger.info("Saved TranslationSession pk=%s with %d clips", session.pk, session.clips.count())
+        except Exception as db_err:
+            logger.warning("Could not save session to DB: %s", db_err)
+
         return JsonResponse({
             'status': 'success',
             'arabic': translation['arabic'],
-            'english': translation['english']
+            'english': translation['english'],
+            'session_id': session_id,
         })
     except json.JSONDecodeError:
         return JsonResponse({'status': 'failed', 'message': 'Invalid JSON payload.'}, status=400)
@@ -319,3 +368,71 @@ def api_ollama_status(request):
     except Exception as e:
         logger.warning("Ollama status check failed: %s", e)
         return JsonResponse({'status': 'offline', 'models': [], 'roles': {}})
+
+
+def history(request):
+    """Render the translation history browser page."""
+    return render(request, 'app/history.html')
+
+
+def api_sessions(request):
+    """
+    GET  /api/sessions/       — list recent TranslationSessions (JSON)
+    DELETE /api/sessions/<id>/ — delete a session and its clips
+    """
+    from app.models import TranslationSession
+
+    if request.method == 'DELETE':
+        # Extract session ID from URL path
+        path_parts = request.path.rstrip('/').split('/')
+        try:
+            session_id = int(path_parts[-1])
+        except (ValueError, IndexError):
+            return JsonResponse({'status': 'failed', 'message': 'Invalid session ID.'}, status=400)
+        try:
+            sess = TranslationSession.objects.get(pk=session_id)
+            # Also delete video files via clip.delete()
+            for clip in sess.clips.all():
+                clip.delete()
+            sess.delete()
+            return JsonResponse({'status': 'success', 'deleted': session_id})
+        except TranslationSession.DoesNotExist:
+            return JsonResponse({'status': 'failed', 'message': 'Session not found.'}, status=404)
+
+    # GET — return paginated list
+    page = int(request.GET.get('page', 1))
+    per_page = int(request.GET.get('per_page', 20))
+    offset = (page - 1) * per_page
+
+    sessions = TranslationSession.objects.prefetch_related('clips').order_by('-created_at')[offset:offset + per_page]
+    total = TranslationSession.objects.count()
+
+    results = []
+    for sess in sessions:
+        clips_data = []
+        for clip in sess.clips.all():
+            clips_data.append({
+                'id': clip.pk,
+                'gesture': clip.gesture,
+                'dialect': clip.dialect,
+                'confidence': round(clip.confidence * 100, 1),
+                'video_url': clip.video.url if clip.video else None,
+                'created_at': clip.created_at.strftime('%Y-%m-%d %H:%M'),
+            })
+        results.append({
+            'id': sess.pk,
+            'arabic': sess.arabic_sentence,
+            'english': sess.english_sentence,
+            'dialect': sess.dialect,
+            'clip_count': len(clips_data),
+            'clips': clips_data,
+            'created_at': sess.created_at.strftime('%Y-%m-%d %H:%M'),
+        })
+
+    return JsonResponse({
+        'status': 'success',
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'sessions': results,
+    })
