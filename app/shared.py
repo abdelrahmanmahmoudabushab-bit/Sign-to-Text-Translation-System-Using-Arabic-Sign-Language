@@ -21,57 +21,78 @@ def discover_sequences(
 ) -> List[Tuple[str, str]]:
     """
     Walk the KArSL-502 directory structure to find all frame sequences.
-
-    Structure: data_dir / signer / session / split / signID / session_folder / frames.jpg
-
-    Args:
-        data_dir: Root path of the KArSL-502 dataset.
-        target_sign_ids: Set of sign ID strings to filter (e.g. {'0001', '0002', ...}).
-                         If None, imports `actions` from DataLoader and uses its keys.
-
-    Returns:
-        List of (frames_dir_path, sign_id_str) tuples for the target signs.
+    Optimized with os.scandir and JSON caching.
     """
+    import json
     if target_sign_ids is None:
         from app.DataLoader import actions
         target_sign_ids = set(actions.keys())
 
-    sequences: List[Tuple[str, str]] = []
-
     logger.info("Scanning dataset directory: %s", data_dir)
-    logger.info("Looking for %d target sign IDs...", len(target_sign_ids))
 
     if not os.path.exists(data_dir):
         logger.warning("Dataset directory does not exist: %s", data_dir)
-        return sequences
+        return []
 
-    try:
-        signers = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
-        for signer in signers:
-            signer_path = os.path.join(data_dir, signer)
-            sessions = [d for d in os.listdir(signer_path) if os.path.isdir(os.path.join(signer_path, d))]
-            for session in sessions:
-                session_path = os.path.join(signer_path, session)
-                splits = [d for d in os.listdir(session_path) if os.path.isdir(os.path.join(session_path, d))]
-                for split in splits:
-                    split_path = os.path.join(session_path, split)
-                    sign_ids = [d for d in os.listdir(split_path) if os.path.isdir(os.path.join(split_path, d))]
-                    for sign_id in sign_ids:
-                        if sign_id not in target_sign_ids:
-                            continue
-                        sign_path = os.path.join(split_path, sign_id)
-                        try:
-                            folders = os.listdir(sign_path)
-                            for folder in folders:
-                                folder_path = os.path.join(sign_path, folder)
-                                sequences.append((folder_path, sign_id))
-                        except Exception:
-                            pass
-    except Exception as e:
-        logger.exception("Error during dataset sequence discovery: %s", e)
+    cache_path = os.path.join(data_dir, "discovered_sequences_cache.json")
+    all_sequences = []
 
+    # Try loading cache first
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached_data = json.load(f)
+            # Ensure the cache structure is what we expect
+            if isinstance(cached_data, list):
+                all_sequences = [(os.path.join(data_dir, item[0]), item[1]) for item in cached_data]
+                logger.info("Loaded %d sequences from cache: %s", len(all_sequences), cache_path)
+        except Exception as e:
+            logger.warning("Failed to load sequences cache: %s. Re-scanning...", e)
+            all_sequences = []
+
+    if not all_sequences:
+        logger.info("Cache not found, invalid, or empty. Scanning directory structure...")
+        try:
+            raw_discovered = []
+            # Use os.scandir for high performance traversal
+            with os.scandir(data_dir) as signers:
+                for signer in signers:
+                    if signer.is_dir():
+                        with os.scandir(signer.path) as sessions:
+                            for session in sessions:
+                                if session.is_dir():
+                                    with os.scandir(session.path) as splits:
+                                        for split in splits:
+                                            if split.is_dir():
+                                                with os.scandir(split.path) as sign_ids:
+                                                    for sign_id in sign_ids:
+                                                        if sign_id.is_dir():
+                                                            with os.scandir(sign_id.path) as folders:
+                                                                for folder in folders:
+                                                                    if folder.is_dir():
+                                                                        # Verify folder has frames before caching
+                                                                        try:
+                                                                            if any(f.name.lower().endswith(('.jpg', '.png')) for f in os.scandir(folder.path)):
+                                                                                rel_path = os.path.relpath(folder.path, data_dir)
+                                                                                raw_discovered.append((rel_path, sign_id.name))
+                                                                                all_sequences.append((folder.path, sign_id.name))
+                                                                        except OSError:
+                                                                            pass
+            
+            # Save raw relative paths to cache
+            try:
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(raw_discovered, f, indent=2)
+                logger.info("Saved %d valid sequences to cache: %s", len(raw_discovered), cache_path)
+            except Exception as e:
+                logger.warning("Failed to save sequences cache: %s", e)
+        except Exception as e:
+            logger.exception("Error during dataset sequence discovery: %s", e)
+
+    # Filter by target sign ids
+    sequences = [(path, sign_id) for path, sign_id in all_sequences if sign_id in target_sign_ids]
     n_classes = len(set(s[1] for s in sequences))
-    logger.info("Found %d sequences across %d sign classes", len(sequences), n_classes)
+    logger.info("Found %d matching sequences across %d sign classes", len(sequences), n_classes)
     return sequences
 
 

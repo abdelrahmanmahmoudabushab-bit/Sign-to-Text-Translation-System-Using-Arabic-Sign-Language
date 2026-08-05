@@ -12,8 +12,8 @@ import csv
 import re
 import json
 
-# Add repository root to python search path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to python search path (script is now in scripts/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.DataLoader import arabic_labels as existing_labels, actions as existing_actions
 
 def translate_term(translator, text):
@@ -107,63 +107,23 @@ def main():
             
         new_arabic_labels[idx] = arabic_word
         
-    # 4. Generate the new app/DataLoader.py file content
-    dataloader_path = r"d:\signo v6\Sign-to-Text-Translation-System-Using-Arabic-Sign-Language\app\DataLoader.py"
-    
-    print(f"\nWriting updated mappings to {dataloader_path}...")
-    
-    # Read the start of DataLoader.py up to line 12 (where dictionary mapping starts)
-    with open(dataloader_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-        
-    header = []
-    for line in lines:
-        if line.startswith("arabic_labels = {"):
-            break
-        header.append(line)
-        
-    if not header:
-        # Fallback if file structure is different than expected
-        header = [
-            "import mediapipe as mp\n",
-            "import numpy as np\n",
-            "from PIL import Image\n",
-            "import os\n",
-            "import warnings\n",
-            "import cv2\n",
-            "warnings.filterwarnings(\"ignore\")\n\n",
-            "N_FRAMES = 60 # N Frames Per Prediction\n",
-            "N_KEYPOINTS = 225 # N Keypoints captured by mediapipe\n\n"
-        ]
-        
-    # Format the dictionaries cleanly
-    labels_str = "arabic_labels = {\n"
-    for idx in sorted(new_arabic_labels.keys()):
-        val = new_arabic_labels[idx].replace("'", "\\'")
-        labels_str += f"    {idx}: '{val}',\n"
-    labels_str += "}\n\n"
-    
-    actions_str = "actions = {\n"
-    for sign_id in sorted(new_actions.keys()):
-        actions_str += f"    '{sign_id}': {new_actions[sign_id]},\n"
-    actions_str += "}\n\n"
-    
-    # Find the DataLoader class in existing DataLoader.py and append it
-    class_body = []
-    class_started = False
-    for line in lines:
-        if line.startswith("class DataLoader:"):
-            class_started = True
-        if class_started:
-            class_body.append(line)
-            
-    with open(dataloader_path, 'w', encoding='utf-8') as f:
-        f.writelines(header)
-        f.write(labels_str)
-        f.write(actions_str)
-        f.writelines(class_body)
-        
-    print("DataLoader.py updated successfully with all 502 sign words!")
+    # 4. Write to label_config.json (the format DataLoader.py reads)
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "app", "label_config.json"
+    )
+
+    print(f"\nWriting updated label config to {config_path}...")
+
+    config_data = {
+        "arabic_labels": {str(k): v for k, v in new_arabic_labels.items()},
+        "actions": new_actions
+    }
+
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(config_data, f, ensure_ascii=False, indent=2)
+
+    print(f"label_config.json updated successfully with all {len(new_arabic_labels)} sign words!")
 
 if __name__ == "__main__":
     main()

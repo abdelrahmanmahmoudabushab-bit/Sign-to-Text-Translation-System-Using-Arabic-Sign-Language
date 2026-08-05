@@ -142,6 +142,11 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
     ollama_info = check_ollama_status()
     gpu_info = check_gpu_status()
 
+    # Read Jetson Hardware Specific Metrics
+    gpu_load = get_jetson_gpu_load()
+    cpu_temp = get_thermal_temperature("cpu-thermal")
+    gpu_temp = get_thermal_temperature("gpu-thermal")
+
     return {
         "status": "online",
         "system": {
@@ -152,6 +157,9 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
             "memory_percent": mem.percent,
             "disk_percent": disk.percent,
             "uptime": uptime_str,
+            "gpu_load": gpu_load,
+            "cpu_temp": cpu_temp,
+            "gpu_temp": gpu_temp
         },
         "ai_engine": {
             "gpu": gpu_info,
@@ -168,3 +176,38 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
         },
         "recent_logs": logs_list
     }
+
+
+def get_jetson_gpu_load() -> float:
+    """Read GPU activity load from Tegra devfreq sysfs on Jetson boards."""
+    path = "/sys/class/devfreq/17000000.gpu/device/load"
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                val = int(f.read().strip())
+                # Out of 1000, convert to standard percentage
+                return round(val / 10.0, 1)
+        except Exception:
+            pass
+    return 0.0
+
+
+def get_thermal_temperature(zone_type: str) -> float:
+    """Read system temperature in degrees Celsius for a specific thermal zone type."""
+    base_path = "/sys/class/thermal"
+    if os.path.exists(base_path):
+        try:
+            for zone in os.listdir(base_path):
+                if zone.startswith("thermal_zone"):
+                    z_path = os.path.join(base_path, zone)
+                    type_file = os.path.join(z_path, "type")
+                    temp_file = os.path.join(z_path, "temp")
+                    if os.path.exists(type_file) and os.path.exists(temp_file):
+                        with open(type_file, "r") as tf:
+                            if tf.read().strip() == zone_type:
+                                with open(temp_file, "r") as tmpf:
+                                    return round(int(tmpf.read().strip()) / 1000.0, 1)
+        except Exception:
+            pass
+    return 0.0
+

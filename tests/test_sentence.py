@@ -14,8 +14,8 @@ if sys.platform.startswith('win'):
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path (script is now in tests/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.DataLoader import DataLoader, actions, arabic_labels, N_FRAMES, N_KEYPOINTS
 from app.shared import discover_sequences

@@ -2,7 +2,10 @@ import json
 import logging
 import os
 import shutil
+import time
+import uuid
 
+from django.conf import settings as django_settings
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import render
@@ -16,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Constants for upload validation
 MAX_VIDEO_SIZE = 30 * 1024 * 1024  # 30 MB
-ALLOWED_VIDEO_MIMES = {'video/webm', 'video/mp4', 'video/ogg', 'video/x-matroska'}
+ALLOWED_VIDEO_MIMES = {'video/webm', 'video/mp4', 'video/ogg', 'video/x-matroska', 'application/octet-stream'}
 
 
 @csrf_exempt
@@ -43,25 +46,23 @@ def upload_video(request):
                 'message': 'Invalid file type. Please upload a video file.'
             }, status=400)
 
-        # Save the uploaded video (browser records WebM, so keep correct extension)
+        # Save the uploaded video with unique filename and correct extension to prevent race conditions
+        original_name = getattr(video_file, 'name', 'video.webm')
+        ext = os.path.splitext(original_name)[1] or '.webm'
         upload_dir = os.path.join('media', 'uploaded_videos')
         os.makedirs(upload_dir, exist_ok=True)
-        video_path = os.path.join(upload_dir, 'video.webm')
+        video_filename = f'video_{uuid.uuid4().hex[:8]}{ext}'
+        video_path = os.path.join(upload_dir, video_filename)
         with open(video_path, 'wb+') as destination:
             for chunk in video_file.chunks():
                 destination.write(chunk)
-
-        # Extract keypoints and predict
-        x = DataLoader.load_inference_data(video_path)
-        if x is None:
-            return JsonResponse({'status': 'failed', 'message': 'Could not process video frames.'})
 
         # Fetch dialect and history from session/request
         dialect = request.POST.get('dialect', 'Saudi Arabic Sign Language')
         history = request.session.get('translation_history', [])
 
-        logger.info("Inference input shape: %s (Dialect: %s)", x.shape, dialect)
-        prediction = util.predict(x, video_path=video_path, history=history, dialect=dialect)
+        # Predict with parallelized MediaPipe extraction and VLM prep
+        prediction = util.predict(x=None, video_path=video_path, history=history, dialect=dialect)
         logger.info("Prediction: %s", prediction)
 
         # Update history
@@ -73,7 +74,7 @@ def upload_video(request):
         # On-Device Self-Learning Data Collector: Archive clips for batch retraining
         if not prediction or prediction == "?":
             try:
-                new_signs_dir = os.path.join(settings.MEDIA_ROOT, 'new_signs')
+                new_signs_dir = os.path.join(django_settings.MEDIA_ROOT, 'new_signs')
                 os.makedirs(new_signs_dir, exist_ok=True)
                 sample_id = f"sample_{int(time.time()*1000)}"
                 archived_clip = os.path.join(new_signs_dir, f"{sample_id}.webm")
@@ -85,13 +86,18 @@ def upload_video(request):
                         'sample_id': sample_id,
                         'dialect': dialect,
                         'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-                        'keypoints_shape': list(x.shape)
+                        'keypoints_shape': [60, 225]
                     }, mf, ensure_ascii=False, indent=2)
                 logger.info("Saved un-matched clip to %s for self-learning batch retraining", archived_clip)
             except Exception as e:
                 logger.warning("Failed to save self-learning clip: %s", e)
 
-        import time
+        # Clean up temporary video file after prediction
+        try:
+            os.remove(video_path)
+        except OSError:
+            pass
+
         return JsonResponse({
             'status': 'success',
             'message': prediction,
@@ -186,3 +192,130 @@ def api_new_signs(request):
                 pass
     return JsonResponse({'status': 'success', 'count': count, 'recent_samples': samples})
 
+
+def api_developer_logs(request):
+    """JSON API endpoint returning the latest Gunicorn/systemd logs for signo.service."""
+    import subprocess
+    try:
+        res = subprocess.run(
+            ["journalctl", "-u", "signo.service", "-n", "45", "--no-pager"],
+            capture_output=True,
+            text=True,
+            timeout=2.0
+        )
+        if res.returncode == 0:
+            lines = res.stdout.strip().split("\n")
+            return JsonResponse({'status': 'success', 'logs': lines})
+    except Exception as e:
+        logger.warning("Failed to fetch journal logs: %s", e)
+    
+    return JsonResponse({'status': 'success', 'logs': ["Systemd journal logs not available on this host platform."]})
+
+
+@csrf_exempt
+@require_POST
+def api_control_jetson(request):
+    """Execute hardware and model management actions on the Jetson Nano."""
+    import subprocess
+    try:
+        data = json.loads(request.body)
+        action = data.get("action")
+        
+        if action == "restart_service":
+            import os
+            res = subprocess.run(["pgrep", "-o", "-f", "gunicorn"], capture_output=True, text=True)
+            if res.returncode == 0:
+                pid = res.stdout.strip()
+                if pid:
+                    os.kill(int(pid), 1)  # 1 is SIGHUP (HUP)
+                    return JsonResponse({'status': 'success', 'message': f'Gunicorn master PID {pid} reloaded.'})
+            return JsonResponse({'status': 'failed', 'message': 'Gunicorn master PID not found.'})
+            
+        elif action == "preload_vlm":
+            from app.llm_util import OLLAMA_URL, VLM_MODEL
+            import requests
+            res = requests.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": VLM_MODEL,
+                    "prompt": "",
+                    "keep_alive": -1
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': f'Model {VLM_MODEL} loaded into GPU.'})
+            return JsonResponse({'status': 'failed', 'message': f'Ollama returned status {res.status_code}'})
+            
+        elif action == "preload_judge":
+            from app.llm_util import OLLAMA_URL, JUDGE_MODEL
+            import requests
+            res = requests.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": JUDGE_MODEL,
+                    "prompt": "",
+                    "keep_alive": -1
+                },
+                timeout=15
+            )
+            if res.status_code == 200:
+                return JsonResponse({'status': 'success', 'message': f'Model {JUDGE_MODEL} loaded into GPU.'})
+            return JsonResponse({'status': 'failed', 'message': f'Ollama returned status {res.status_code}'})
+            
+        elif action == "keep_alive":
+            # Set infinite keep-alive timeout for both models
+            from app.llm_util import OLLAMA_URL, VLM_MODEL, JUDGE_MODEL
+            import requests
+            for m in [VLM_MODEL, JUDGE_MODEL]:
+                try:
+                    requests.post(
+                        f"{OLLAMA_URL}/api/generate",
+                        json={"model": m, "prompt": "", "keep_alive": -1},
+                        timeout=5
+                    )
+                except Exception:
+                    pass
+            return JsonResponse({'status': 'success', 'message': 'Ollama infinite keep-alive set for active models.'})
+            
+        else:
+            return JsonResponse({'status': 'failed', 'message': f'Action {action} not recognized.'}, status=400)
+            
+    except Exception as e:
+        logger.exception("Error executing Jetson control action")
+        return JsonResponse({'status': 'failed', 'message': str(e)}, status=500)
+
+
+def api_ollama_status(request):
+    """
+    JSON API endpoint — polls the local Ollama server for loaded model status.
+    Returns: loaded models, VRAM usage, and whether each AI role is ready.
+    Used by the kiosk 'AI Status' widget.
+    """
+    import requests as req
+    from app.llm_util import OLLAMA_URL, VLM_MODEL, JUDGE_MODEL, TRANSLATOR_MODEL
+
+    try:
+        resp = req.get(f"{OLLAMA_URL}/api/ps", timeout=3)
+        if resp.status_code != 200:
+            return JsonResponse({'status': 'offline', 'models': [], 'roles': {}})
+
+        data = resp.json()
+        loaded = data.get('models', [])
+        loaded_names = [m.get('name', '') for m in loaded]
+
+        roles = {
+            'vlm':        {'model': VLM_MODEL,        'ready': VLM_MODEL in loaded_names},
+            'judge':      {'model': JUDGE_MODEL,       'ready': JUDGE_MODEL in loaded_names},
+            'translator': {'model': TRANSLATOR_MODEL,  'ready': TRANSLATOR_MODEL in loaded_names},
+        }
+
+        return JsonResponse({
+            'status': 'online',
+            'models': loaded,
+            'roles': roles,
+        })
+
+    except Exception as e:
+        logger.warning("Ollama status check failed: %s", e)
+        return JsonResponse({'status': 'offline', 'models': [], 'roles': {}})

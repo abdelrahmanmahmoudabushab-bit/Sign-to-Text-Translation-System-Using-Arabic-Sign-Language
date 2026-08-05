@@ -176,6 +176,12 @@ dmypy.json
 *.keras
 *.h5
 
+# TensorRT engines (compiled on target hardware)
+*.engine
+
+# ONNX model exports
+*.onnx
+
 # Extraction checkpoint files (memory-mapped, can be huge)
 *.dat
 
@@ -185,6 +191,9 @@ datasets/
 
 # Django uploaded media
 media/uploaded_videos/
+
+# Django collected static files
+staticfiles/
 
 # Extraction chunk logs (already covered by *.log but explicit)
 extract_chunk_*.log

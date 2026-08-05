@@ -100,7 +100,7 @@ flowchart TD
 * **High-Confidence Fast-Path ($\ge 88\%$):** If CNN-LSTM confidence is $\ge 88\%$, the result returns in **< 10ms**, bypassing the VLM.
 
 ### 3. NVIDIA Jetson Orin Nano TensorRT FP16 Engine
-* **Automated ONNX & TensorRT Converter (`export_tensorrt.py`):** Converts `conv1_lstm.keras` ➔ `conv1_lstm.onnx` ➔ `conv1_lstm.engine`.
+* **Automated ONNX & TensorRT Converter (`scripts/export_tensorrt.py`):** Converts `conv1_lstm.keras` ➔ `conv1_lstm.onnx` ➔ `conv1_lstm.engine`.
 * **Sub-6ms Latency:** Utilizes NVIDIA Tensor Cores for high-speed edge execution.
 * **Multi-Backend Runtime Fallback:** `app/util.py` automatically detects and selects: **TensorRT FP16 Engine** ➔ **ONNX Runtime GPU** ➔ **Keras TensorFlow**.
 
@@ -126,10 +126,10 @@ flowchart TD
 * **Live Telemetry API (`/api/new_signs/`):** Dashboard live counts self-learning samples alongside real-time hardware monitoring (CPU, RAM, GPU, Disk).
 * **Inference Activity Feed:** Streaming event table tracking decision tags (`CONSENSUS`, `JUDGE DEBATE`, `CACHE HIT`, `LSTM DIRECT`), latency, and reasoning.
 
-### 8. NVIDIA Jetson Orin Nano Hardware Tuning (`optimize_jetson.sh`)
+### 8. NVIDIA Jetson Orin Nano Hardware Tuning (`jetson/optimize_jetson.sh`)
 * **MAXN 15W Power Mode:** Automated tuning script configures `nvpmodel -m 0`, locks maximum CPU/GPU frequencies (`jetson_clocks`), forces active fan cooling, enables 4GB ZRAM swap, and sets Docker default-runtime to `nvidia`.
 
-### 7. Standalone Dedicated AI Model Architecture
+### 9. Standalone Dedicated AI Model Architecture
 Each agent role is decoupled into independent environment variables for modular swapping:
 * `VLM_MODEL` (Default: `qwen2-vl:2b`) — Vision Classifier
 * `JUDGE_MODEL` (Default: `qwen2.5:3b`) — Debate Arbitrator
@@ -172,7 +172,7 @@ docker compose up -d
 
 ### 3. Generate TensorRT FP16 Engine (Jetson Hardware)
 ```bash
-docker compose exec signo-web python3 export_tensorrt.py
+docker compose exec signo-web python3 scripts/export_tensorrt.py
 ```
 
 ### 4. Access the Application
@@ -212,10 +212,8 @@ python manage.py runserver 0.0.0.0:8000
 ├── Dockerfile                  # Production NVIDIA L4T TensorFlow Dockerfile
 ├── docker-compose.yml          # Production multi-container GPU stack
 ├── docker-entrypoint.sh        # Container startup, model pre-pulling & Gunicorn tuning
-├── export_tensorrt.py          # Keras -> ONNX -> TensorRT FP16 compilation script
 ├── requirements.txt            # Python dependencies
-├── signo.service               # Systemd background service unit
-├── signo-app.desktop           # Auto-launch desktop kiosk config
+├── manage.py                   # Django management entry point
 │
 ├── app/                        # Main Application Package
 │   ├── DataLoader.py           # MediaPipe keypoint extractor & dataset utilities
@@ -223,20 +221,60 @@ python manage.py runserver 0.0.0.0:8000
 │   ├── shared.py               # CNN-LSTM model architecture definition
 │   ├── telemetry.py            # Real-time hardware & inference event ring-buffer
 │   ├── util.py                 # Hybrid parallel prediction engine & model loader
+│   ├── vlm_util.py             # VLM storyboard frame extraction
 │   ├── views.py                # Django REST endpoints (/upload_video, /api/telemetry)
 │   ├── urls.py                 # Application URL routing
+│   ├── label_config.json       # 502-class Arabic sign vocabulary mapping
 │   │
 │   └── templates/app/
 │       ├── index.html          # Touchscreen Kiosk UI with TTS, Wake Lock & Motion Detect
 │       └── dashboard.html      # Real-time Glassmorphic Telemetry & Hardware Control Center
 │
-├── nginx/
-│   └── nginx.conf              # Nginx reverse proxy, static caching & Gzip config
+├── scripts/                    # Training, Data & Export Pipelines
+│   ├── train.py                # CNN-LSTM training from raw RGB frames
+│   ├── train_from_landmarks.py # Fast training from pre-extracted parquet landmarks
+│   ├── export_tensorrt.py      # Keras → ONNX → TensorRT FP16 compilation
+│   ├── download_karsl.py       # KArSL-502 dataset downloader (Kaggle API)
+│   ├── extract_keypoints_parallel.py  # Parallel MediaPipe keypoint extraction
+│   ├── run_parallel_chunks.py  # Multi-process chunk orchestrator
+│   ├── translate_vocab.py      # Auto-translate 502 English→Arabic label vocabulary
+│   ├── monitor_and_train.py    # Pipeline monitor: wait for extraction → auto-train
+│   ├── fix_model.py            # Keras model compatibility patcher
+│   └── test_all_words.py       # Full vocabulary accuracy evaluation
+│
+├── tests/                      # Inference Test Scripts
+│   ├── test_sentence.py        # Multi-word sentence translation test
+│   └── test_inference.py       # Single-word random inference test
+│
+├── jetson/                     # NVIDIA Jetson Deployment Configs
+│   ├── README.md               # Jetson deployment guide
+│   ├── optimize_jetson.sh      # Hardware performance tuning (MAXN, clocks, ZRAM)
+│   ├── signo.service           # Systemd background service unit
+│   └── signo-app.desktop       # Auto-launch desktop kiosk config
+│
+├── docs/                       # Documentation
+│   └── PIPELINE.md             # Full ML pipeline reference
+│
+├── config/                     # Configuration Templates
+│   └── .env.example            # Environment variable reference
+│
+├── nginx/                      # Reverse Proxy
+│   └── nginx.conf              # Nginx proxy, static caching & Gzip config
 │
 └── pbl/                        # Django Project Configuration
     ├── settings.py             # Django production settings
     └── urls.py                 # Root URL configuration
 ```
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Pipeline Reference](docs/PIPELINE.md) | Full ML pipeline: data → training → export → inference → translation |
+| [Jetson Deployment](jetson/README.md) | Hardware setup, systemd service, kiosk auto-launch, TensorRT compilation |
+| [Environment Config](config/.env.example) | All environment variables with defaults and descriptions |
 
 ---
 

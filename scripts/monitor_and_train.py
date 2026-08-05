@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--pid", type=int, required=True,
                        help="PID of the extraction process to monitor")
     parser.add_argument("--venv_python", type=str,
-                       default=r"d:\signo v6\Sign-to-Text-Translation-System-Using-Arabic-Sign-Language\.venv\Scripts\python.exe",
+                        default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".venv", "Scripts", "python.exe"),
                        help="Path to virtualenv python executable")
     parser.add_argument("--cache_dir", type=str,
                        default=r"D:\signo v6\datasets\keypoints_cache",
@@ -32,12 +32,10 @@ def main():
 
     args = parser.parse_args()
 
-    train_script = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "train.py"
-    )
-    log_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "monitor_and_train.log"
-    )
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    train_script = os.path.join(project_root, "scripts", "train.py")
+    log_file = os.path.join(project_root, "monitor_and_train.log")
 
     def log(message):
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -85,9 +83,7 @@ def main():
     ]
 
     try:
-        training_log = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "training_run.log"
-        )
+        training_log = os.path.join(project_root, "training_run.log")
         with open(training_log, "w", encoding="utf-8") as out:
             process = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, text=True)
             log(f"Training started with PID: {process.pid}")

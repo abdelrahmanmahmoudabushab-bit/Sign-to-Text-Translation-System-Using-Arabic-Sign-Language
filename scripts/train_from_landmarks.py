@@ -20,8 +20,8 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path (script is now in scripts/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.DataLoader import actions, arabic_labels, N_FRAMES, N_KEYPOINTS
 from app.shared import build_model
 
@@ -234,7 +234,7 @@ def main():
 
     if args.model_path is None:
         args.model_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "app", "conv1_lstm.keras"
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "conv1_lstm.keras"
         )
 
     print("=" * 60)

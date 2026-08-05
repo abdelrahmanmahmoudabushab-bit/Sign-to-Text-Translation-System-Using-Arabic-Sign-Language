@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=jetson
 WorkingDirectory=/home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language
-Environment="DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.100.60"
+Environment="DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,192.168.100.60" "VLM_MODEL=qwen2-vl:2b" "JUDGE_MODEL=qwen2.5:3b" "TRANSLATOR_MODEL=qwen2.5:3b" "OLLAMA_HOST=http://localhost:11434"
 ExecStart=/home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language/.venv/bin/gunicorn --workers 3 --threads 2 --timeout 120 --bind 0.0.0.0:8000 pbl.wsgi:application
 Restart=always
 

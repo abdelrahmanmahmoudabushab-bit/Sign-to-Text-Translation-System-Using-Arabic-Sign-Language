@@ -22,8 +22,8 @@ import numpy as np
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# Add app directory to path for DataLoader imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path for app package imports (script is now in scripts/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.DataLoader import DataLoader, actions, arabic_labels, N_FRAMES, N_KEYPOINTS
 from app.shared import discover_sequences, build_model
@@ -287,7 +287,7 @@ def main():
 
     if args.model_path is None:
         args.model_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "app", "conv1_lstm.keras"
         )
 

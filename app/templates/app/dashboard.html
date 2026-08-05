@@ -31,6 +31,23 @@
             --gradient-card: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.005) 100%);
         }
 
+        body.light-theme {
+            --bg: #f1f5f9;
+            --surface: rgba(255, 255, 255, 0.85);
+            --surface-hover: rgba(255, 255, 255, 0.95);
+            --border: rgba(0, 0, 0, 0.08);
+            --border-glow: rgba(14, 165, 233, 0.4);
+            
+            --text-main: #0f172a;
+            --text-sub: #475569;
+            
+            --cyan: #0284c7;
+            --purple: #7c3aed;
+            --emerald: #059669;
+            --amber: #d97706;
+            --rose: #e11d48;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -276,19 +293,35 @@
 
         .node {
             flex: 1;
-            background: rgba(255, 255, 255, 0.025);
-            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 16px;
-            padding: 16px;
+            padding: 18px;
             text-align: center;
             position: relative;
-            transition: all 0.3s ease;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0.35;
         }
 
         .node.active {
+            opacity: 1;
             border-color: var(--cyan);
-            box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
-            background: rgba(56, 189, 248, 0.04);
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.2);
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        .node.active-purple {
+            opacity: 1;
+            border-color: var(--purple);
+            box-shadow: 0 0 25px rgba(192, 132, 252, 0.2);
+            background: rgba(192, 132, 252, 0.05);
+        }
+
+        .node.active-emerald {
+            opacity: 1;
+            border-color: var(--emerald);
+            box-shadow: 0 0 25px rgba(52, 211, 153, 0.2);
+            background: rgba(52, 211, 153, 0.05);
         }
 
         .node-title {
@@ -300,6 +333,7 @@
         .node-sub {
             font-size: 0.75rem;
             color: var(--text-sub);
+            transition: color 0.4s ease;
         }
 
         .node-badge {
@@ -316,10 +350,15 @@
         .badge-ollama { background: rgba(192, 132, 252, 0.15); color: var(--purple); }
 
         .connector {
-            width: 30px;
+            width: 40px;
             height: 2px;
-            background: linear-gradient(90deg, var(--border), var(--cyan));
+            background: rgba(255, 255, 255, 0.05);
             position: relative;
+            transition: background 0.4s ease;
+        }
+
+        .connector.active {
+            background: linear-gradient(90deg, var(--cyan), var(--purple));
         }
 
         .connector::after {
@@ -328,7 +367,13 @@
             right: -4px;
             top: -6px;
             font-size: 10px;
-            color: var(--cyan);
+            color: rgba(255, 255, 255, 0.1);
+            transition: color 0.4s ease;
+        }
+
+        .connector.active::after {
+            color: var(--purple);
+            text-shadow: 0 0 10px var(--purple);
         }
 
         /* ─── Log Table ──────────────────────────────────────────── */
@@ -421,6 +466,183 @@
             .metrics-grid { grid-template-columns: 1fr; }
             header { flex-direction: column; gap: 16px; align-items: flex-start; }
         }
+
+        /* ─── Control Panel Styles ───────────────────────────── */
+        .control-section {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-top: 14px;
+        }
+
+        .control-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+
+        body.light-theme .control-card {
+            background: rgba(0, 0, 0, 0.01);
+        }
+
+        .control-card:hover {
+            border-color: rgba(56, 189, 248, 0.2);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        body.light-theme .control-card:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .control-info h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-main);
+        }
+
+        .control-info p {
+            font-size: 0.76rem;
+            color: var(--text-sub);
+            line-height: 1.4;
+        }
+
+        .btn-control {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-align: center;
+        }
+
+        .btn-control:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-purple {
+            background: rgba(124, 58, 237, 0.1);
+            border-color: rgba(124, 58, 237, 0.3);
+            color: #c084fc;
+        }
+        body.light-theme .btn-purple {
+            color: #7c3aed;
+        }
+        .btn-purple:hover {
+            background: rgba(124, 58, 237, 0.25);
+            box-shadow: 0 0 15px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-cyan {
+            background: rgba(6, 182, 212, 0.1);
+            border-color: rgba(6, 182, 212, 0.3);
+            color: var(--cyan);
+        }
+        .btn-cyan:hover {
+            background: rgba(6, 182, 212, 0.25);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+        }
+
+        .btn-emerald {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: var(--emerald);
+        }
+        .btn-emerald:hover {
+            background: rgba(16, 185, 129, 0.25);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+        }
+
+        /* ─── Developer Log Console ──────────────────────────── */
+        .bottom-columns {
+            display: grid;
+            grid-template-columns: 1.3fr 1.1fr;
+            gap: 24px;
+            margin-top: 10px;
+        }
+
+        .console-section {
+            background: var(--surface);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .console-terminal {
+            background: #020408;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            height: 380px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.76rem;
+            color: #94a3b8;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);
+        }
+
+        .console-line {
+            margin-bottom: 4px;
+            border-left: 2px solid transparent;
+            padding-left: 8px;
+        }
+        
+        .log-error {
+            color: #f43f5e;
+            border-color: #f43f5e;
+            background: rgba(244, 63, 94, 0.04);
+        }
+        
+        .log-warn {
+            color: #fbbf24;
+            border-color: #fbbf24;
+            background: rgba(251, 191, 36, 0.04);
+        }
+        
+        .log-info {
+            color: #38bdf8;
+            border-color: #38bdf8;
+        }
+
+        .log-system {
+            color: #c084fc;
+            font-weight: 600;
+        }
+        
+        .fill-rose { background: linear-gradient(90deg, #f43f5e, #e11d48); }
+
+        @media (max-width: 1200px) {
+            .bottom-columns {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -450,7 +672,7 @@
 
         <!-- ─── Hardware & System Metrics Grid ──────────────────── -->
         <div class="metrics-grid">
-            <!-- CPU Usage -->
+            <!-- CPU Load -->
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">CPU Load</span>
@@ -463,16 +685,55 @@
                 </div>
             </div>
 
-            <!-- Memory Usage -->
+            <!-- GPU Load -->
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">System Memory</span>
+                    <span class="card-title">GPU Load</span>
+                    <span class="card-icon">🚀</span>
+                </div>
+                <div class="card-value" id="val-gpu">--%</div>
+                <div class="card-subtext" id="sub-gpu">Jetson Orin GPU</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-purple" id="bar-gpu" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Unified Memory Usage -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Unified Memory</span>
                     <span class="card-icon">🧠</span>
                 </div>
                 <div class="card-value" id="val-mem">--%</div>
-                <div class="card-subtext" id="sub-mem">-- / -- MB</div>
+                <div class="card-subtext" id="sub-mem">Shared CPU/GPU LPDDR5</div>
                 <div class="progress-bar-bg">
                     <div class="progress-bar-fill fill-purple" id="bar-mem" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- CPU Temperature -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">CPU Temperature</span>
+                    <span class="card-icon">🌡️</span>
+                </div>
+                <div class="card-value" id="val-cpu-temp">-- °C</div>
+                <div class="card-subtext" id="sub-cpu-temp">Thermal Zone 0</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-emerald" id="bar-cpu-temp" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- GPU Temperature -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">GPU Temperature</span>
+                    <span class="card-icon">🔥</span>
+                </div>
+                <div class="card-value" id="val-gpu-temp">-- °C</div>
+                <div class="card-subtext" id="sub-gpu-temp">Thermal Zone 1</div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill fill-emerald" id="bar-gpu-temp" style="width: 0%;"></div>
                 </div>
             </div>
 
@@ -502,16 +763,16 @@
                 </div>
             </div>
 
-            <!-- Self-Learning Samples Card -->
+            <!-- Project Vocabulary Card -->
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">Self-Learning Samples</span>
-                    <span class="card-icon">📦</span>
+                    <span class="card-title">Vocabulary Size</span>
+                    <span class="card-icon">📊</span>
                 </div>
-                <div class="card-value" id="val-samples">0</div>
-                <div class="card-subtext" id="sub-samples">Un-matched clips saved for retraining</div>
+                <div class="card-value" id="val-vocab">502</div>
+                <div class="card-subtext" id="val-samples-text">0 self-learning samples</div>
                 <div class="progress-bar-bg">
-                    <div class="progress-bar-fill fill-purple" id="bar-samples" style="width: 100%;"></div>
+                    <div class="progress-bar-fill fill-emerald" id="bar-vocab" style="width: 100%;"></div>
                 </div>
             </div>
         </div>
@@ -524,69 +785,95 @@
             </div>
 
             <div class="pipeline-graph">
-                <!-- Input Node -->
-                <div class="node active">
-                    <div class="node-title">📷 Video Feed / Input</div>
-                    <div class="node-sub">Keypoint Extraction & Storyboard</div>
-                    <span class="node-badge badge-ready">10FPS Motion Detect</span>
+                <!-- Video Capture Node -->
+                <div class="node active" id="node-input">
+                    <div class="node-title">📹 Video Capture</div>
+                    <div class="node-sub">Saving WebM/MP4 Clip</div>
+                    <span class="node-badge badge-ready">10FPS Motion Check</span>
                 </div>
 
-                <div class="connector"></div>
+                <div class="connector" id="conn-1"></div>
 
-                <!-- CNN-LSTM Node -->
-                <div class="node active">
-                    <div class="node-title">🧠 CNN-LSTM Model</div>
-                    <div class="node-sub">Keypoint Trajectory Classifier</div>
+                <!-- Analysis Node -->
+                <div class="node" id="node-extract">
+                    <div class="node-title">🧬 Keypoint Extraction</div>
+                    <div class="node-sub">MediaPipe Coordinates</div>
                     <span class="node-badge badge-gpu" id="badge-tf">TensorFlow GPU</span>
                 </div>
 
-                <div class="connector"></div>
+                <div class="connector" id="conn-2"></div>
 
-                <!-- Qwen2-VL Node -->
-                <div class="node active">
+                <!-- Qwen2-VL Storyboard Node -->
+                <div class="node" id="node-vlm">
                     <div class="node-title">👁️ Qwen2-VL Storyboard</div>
-                    <div class="node-sub">Direct Visual & Facial Analysis</div>
+                    <div class="node-sub">Visual Hand & Facial Mesh</div>
                     <span class="node-badge badge-ollama" id="badge-vlm">Ollama VLM:2b</span>
                 </div>
 
-                <div class="connector"></div>
+                <div class="connector" id="conn-3"></div>
 
                 <!-- Judge LLM Node -->
-                <div class="node active">
-                    <div class="node-title">⚖️ Judge Agent (qwen2.5:3b)</div>
+                <div class="node" id="node-judge">
+                    <div class="node-title">⚖️ Llama-3.2 Judge</div>
                     <div class="node-sub">Resolves Disagreements</div>
-                    <span class="node-badge badge-ready" id="badge-judge">Dialect Context Router</span>
+                    <span class="node-badge badge-ready" id="badge-judge">Arbitration Agent</span>
+                </div>
+
+                <div class="connector" id="conn-4"></div>
+
+                <!-- Output Node -->
+                <div class="node" id="node-output">
+                    <div class="node-title">💬 Final Translation</div>
+                    <div class="node-sub">Waiting...</div>
+                    <span class="node-badge badge-ready">Consensus Word</span>
                 </div>
             </div>
         </div>
 
-        <!-- ─── Real-Time Inference Stream Log ─────────────────── -->
-        <div class="logs-section">
-            <div class="section-title">
-                <span>Real-Time Inference Activity Feed</span>
-                <button class="btn-clear" onclick="clearLogs()">Clear History</button>
+        <!-- ─── Columns Section ────────────────────────────────── -->
+        <div class="bottom-columns">
+            <!-- Left Column: Inference Activity Feed -->
+            <div class="logs-section">
+                <div class="section-title">
+                    <span>Real-Time Inference Activity Feed</span>
+                    <button class="btn-clear" onclick="clearLogs()">Clear History</button>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Decision Pipeline</th>
+                                <th>LSTM Prediction</th>
+                                <th>VLM Prediction</th>
+                                <th>Final Selected Word</th>
+                                <th>Dialect</th>
+                                <th>Latency</th>
+                                <th>Reasoning / Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body">
+                            <tr>
+                                <td colspan="8" class="empty-logs">Waiting for real-time predictions...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Decision Pipeline</th>
-                            <th>LSTM Prediction</th>
-                            <th>VLM Prediction</th>
-                            <th>Final Selected Word</th>
-                            <th>Dialect</th>
-                            <th>Latency</th>
-                            <th>Reasoning / Notes</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logs-table-body">
-                        <tr>
-                            <td colspan="8" class="empty-logs">Waiting for real-time predictions...</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <!-- Right Column: Developer logs terminal console -->
+            <div class="console-section">
+                <div class="section-title">
+                    <span>📟 Jetson systemd Console Output (signo.service)</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-clear" id="btn-pause-logs" onclick="toggleLogPause()" style="background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.3); color: var(--cyan); padding: 4px 10px; font-size: 0.72rem;">Pause</button>
+                        <button class="btn-clear" onclick="fetchDeveloperLogs()" style="padding: 4px 10px; font-size: 0.72rem;">Refresh</button>
+                    </div>
+                </div>
+                <div class="console-terminal" id="terminal-logs">
+                    Connecting to systemd log stream...
+                </div>
             </div>
         </div>
 
@@ -594,6 +881,8 @@
 
     <script>
         // ─── Telemetry Polling Script ─────────────────────────────────
+        let logsPaused = false;
+
         async function fetchTelemetry() {
             try {
                 const response = await fetch('/api/telemetry/');
@@ -609,6 +898,25 @@
                 document.getElementById('val-mem').innerText = `${data.system.memory_percent}%`;
                 document.getElementById('sub-mem').innerText = `${data.system.memory_used_mb} / ${data.system.memory_total_mb} MB`;
                 document.getElementById('bar-mem').style.width = `${data.system.memory_percent}%`;
+
+                // Jetson GPU Load
+                const gpuLoad = data.system.gpu_load || 0.0;
+                document.getElementById('val-gpu').innerText = `${gpuLoad}%`;
+                document.getElementById('bar-gpu').style.width = `${gpuLoad}%`;
+
+                // CPU Temperature with colorizing threshold
+                const cpuTemp = data.system.cpu_temp || 0.0;
+                document.getElementById('val-cpu-temp').innerText = cpuTemp > 0 ? `${cpuTemp} °C` : '-- °C';
+                const cpuBar = document.getElementById('bar-cpu-temp');
+                cpuBar.style.width = `${Math.min(cpuTemp, 100)}%`;
+                cpuBar.className = 'progress-bar-fill ' + (cpuTemp < 60 ? 'fill-emerald' : cpuTemp < 75 ? 'fill-amber' : 'fill-rose');
+
+                // GPU Temperature with colorizing threshold
+                const gpuTemp = data.system.gpu_temp || 0.0;
+                document.getElementById('val-gpu-temp').innerText = gpuTemp > 0 ? `${gpuTemp} °C` : '-- °C';
+                const gpuBar = document.getElementById('bar-gpu-temp');
+                gpuBar.style.width = `${Math.min(gpuTemp, 100)}%`;
+                gpuBar.className = 'progress-bar-fill ' + (gpuTemp < 60 ? 'fill-emerald' : gpuTemp < 75 ? 'fill-amber' : 'fill-rose');
 
                 // 2. Inference Metrics
                 const metrics = data.inference_metrics;
@@ -642,9 +950,13 @@
 
                 // 4. Render Table Logs
                 renderLogsTable(data.recent_logs);
+                
+                // Update dynamic pipeline visualizer highlighting
+                updatePipelineVisualizer(data.recent_logs[0]);
 
-                // 5. Fetch Self-Learning Samples
+                // 5. Fetch Self-Learning Samples and Dev Logs
                 fetchNewSigns();
+                fetchDeveloperLogs();
 
             } catch (err) {
                 console.warn("Telemetry poll error:", err);
@@ -656,10 +968,73 @@
                 const res = await fetch('/api/new_signs/');
                 if (!res.ok) return;
                 const d = await res.json();
-                document.getElementById('val-samples').innerText = d.count || 0;
+                document.getElementById('val-samples-text').innerText = `${d.count || 0} self-learning samples`;
             } catch (e) {
                 console.warn("New signs fetch error:", e);
             }
+        }
+
+        async function fetchDeveloperLogs() {
+            if (logsPaused) return;
+            try {
+                const res = await fetch('/api/developer_logs/');
+                if (!res.ok) return;
+                const d = await res.json();
+                renderTerminalLogs(d.logs);
+            } catch (err) {
+                console.warn("Error fetching developer logs:", err);
+            }
+        }
+
+        function renderTerminalLogs(lines) {
+            const term = document.getElementById('terminal-logs');
+            if (!lines || lines.length === 0) {
+                term.innerHTML = '<div class="console-line log-system">No active console output found.</div>';
+                return;
+            }
+
+            let html = '';
+            lines.forEach(line => {
+                let cls = '';
+                if (line.includes('ERROR') || line.includes('CRITICAL') || line.includes('SIGKILL') || line.includes('fail')) {
+                    cls = 'log-error';
+                } else if (line.includes('WARNING') || line.includes('warn') || line.includes('abort') || line.includes('HUP')) {
+                    cls = 'log-warn';
+                } else if (line.includes('INFO') || line.includes('success')) {
+                    cls = 'log-info';
+                } else if (line.includes('gunicorn') || line.includes('Starting') || line.includes('Booting')) {
+                    cls = 'log-system';
+                }
+                html += `<div class="console-line ${cls}">${escapeHtml(line)}</div>`;
+            });
+            term.innerHTML = html;
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function toggleLogPause() {
+            logsPaused = !logsPaused;
+            const btn = document.getElementById('btn-pause-logs');
+            if (logsPaused) {
+                btn.innerText = 'Resume';
+                btn.style.color = 'var(--amber)';
+                btn.style.borderColor = 'rgba(251, 191, 36, 0.3)';
+                btn.style.background = 'rgba(251, 191, 36, 0.1)';
+            } else {
+                btn.innerText = 'Pause';
+                btn.style.color = 'var(--cyan)';
+                btn.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+                btn.style.background = 'rgba(56, 189, 248, 0.1)';
+                fetchDeveloperLogs();
+            }
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
         function renderLogsTable(logs) {
@@ -710,6 +1085,94 @@
             }
         }
 
+        function updatePipelineVisualizer(latestLog) {
+            const nodeInput = document.getElementById('node-input');
+            const nodeExtract = document.getElementById('node-extract');
+            const nodeVlm = document.getElementById('node-vlm');
+            const nodeJudge = document.getElementById('node-judge');
+            const nodeOutput = document.getElementById('node-output');
+            
+            const conn1 = document.getElementById('conn-1');
+            const conn2 = document.getElementById('conn-2');
+            const conn3 = document.getElementById('conn-3');
+            const conn4 = document.getElementById('conn-4');
+
+            // Reset classes to default inactive states
+            const allNodes = [nodeInput, nodeExtract, nodeVlm, nodeJudge, nodeOutput];
+            allNodes.forEach(n => {
+                n.className = 'node';
+            });
+            const allConns = [conn1, conn2, conn3, conn4];
+            allConns.forEach(c => {
+                c.className = 'connector';
+            });
+
+            if (!latestLog) {
+                // Initial / Idle state
+                nodeInput.classList.add('active');
+                nodeOutput.querySelector('.node-sub').innerText = 'Waiting...';
+                return;
+            }
+
+            const dtype = latestLog.decision_type;
+            const word = latestLog.final_pred || '?';
+
+            // Active path tracing according to request decision type
+            if (dtype === 'cache_hit') {
+                // Instant cache hit path
+                nodeInput.classList.add('active');
+                nodeOutput.classList.add('active-emerald');
+                nodeOutput.querySelector('.node-sub').innerText = `Cache HIT: "${word}"`;
+                conn4.classList.add('active');
+            }
+            else if (dtype === 'lstm_only') {
+                // High confidence path: Video -> Extraction -> Output (VLM bypassed)
+                nodeInput.classList.add('active');
+                nodeExtract.classList.add('active');
+                nodeOutput.classList.add('active');
+                nodeOutput.querySelector('.node-sub').innerText = `Decided: "${word}"`;
+                
+                conn1.classList.add('active');
+                conn4.classList.add('active');
+            }
+            else if (dtype === 'consensus') {
+                // Standard consensus path: Video -> Extraction + VLM -> Output (Judge bypassed)
+                nodeInput.classList.add('active');
+                nodeExtract.classList.add('active');
+                nodeVlm.classList.add('active-purple');
+                nodeOutput.classList.add('active-emerald');
+                nodeOutput.querySelector('.node-sub').innerText = `Decided: "${word}"`;
+
+                conn1.classList.add('active');
+                conn2.classList.add('active');
+                conn4.classList.add('active');
+            }
+            else if (dtype === 'judge') {
+                // Dispute arbitration path: Video -> Extraction + VLM -> Judge -> Output
+                nodeInput.classList.add('active');
+                nodeExtract.classList.add('active');
+                nodeVlm.classList.add('active-purple');
+                nodeJudge.classList.add('active-purple');
+                nodeOutput.classList.add('active-emerald');
+                nodeOutput.querySelector('.node-sub').innerText = `Decided: "${word}"`;
+
+                conn1.classList.add('active');
+                conn2.classList.add('active');
+                conn3.classList.add('active');
+                conn4.classList.add('active');
+            }
+            else {
+                // Fallback / standard path
+                nodeInput.classList.add('active');
+                nodeExtract.classList.add('active');
+                nodeOutput.classList.add('active');
+                nodeOutput.querySelector('.node-sub').innerText = `Decided: "${word}"`;
+
+                conn1.classList.add('active');
+                conn4.classList.add('active');
+            }
+        }
+
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
@@ -725,7 +1188,7 @@
             return cookieValue;
         }
 
-        // Start 2-second telemetry loop
+        // Start 2-second telemetry loops
         fetchTelemetry();
         setInterval(fetchTelemetry, 2000);
     </script>

@@ -17,7 +17,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logger = logging.getLogger("export_tensorrt")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KERAS_PATH = os.path.join(BASE_DIR, "app", "conv1_lstm.keras")
 ONNX_PATH = os.path.join(BASE_DIR, "app", "conv1_lstm.onnx")
 ENGINE_PATH = os.path.join(BASE_DIR, "app", "conv1_lstm.engine")
