@@ -848,34 +848,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- 🦙 Live Ollama AI Status Card -->
-                <div class="card" style="gap: 12px;" id="ollamaStatusCard">
-                    <div style="display:flex; align-items:center; justify-content:space-between;">
-                        <div class="result-label" style="margin:0;">🦙 Ollama AI Engine Status</div>
-                        <span id="ollamaOnlineBadge" style="font-size:0.78rem; font-weight:800; padding:4px 12px; border-radius:20px; background:rgba(156,163,175,0.15); color:var(--text-muted); border:1px solid rgba(156,163,175,0.2); transition:all 0.3s ease;">Checking...</span>
-                    </div>
-                    <div id="ollamaRoles" style="display:flex; flex-direction:column; gap:8px;">
-                        <div class="ollama-role-row" id="roleVlm">
-                            <span class="role-dot" id="dotVlm"></span>
-                            <span class="role-name">Vision Classifier (VLM)</span>
-                            <span class="role-model" id="modelVlm">qwen2-vl:2b</span>
-                        </div>
-                        <div class="ollama-role-row" id="roleJudge">
-                            <span class="role-dot" id="dotJudge"></span>
-                            <span class="role-name">Judge Arbitrator</span>
-                            <span class="role-model" id="modelJudge">qwen2.5:3b</span>
-                        </div>
-                        <div class="ollama-role-row" id="roleTranslator">
-                            <span class="role-dot" id="dotTranslator"></span>
-                            <span class="role-name">Sentence Translator</span>
-                            <span class="role-model" id="modelTranslator">qwen2.5:3b</span>
-                        </div>
-                    </div>
-                    <button id="ollamaPreloadBtn" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;border-radius:10px;padding:10px 16px;font-size:0.88rem;font-weight:700;cursor:pointer;min-height:40px;display:flex;align-items:center;justify-content:center;gap:8px;" title="Preload all models into GPU VRAM">
-                        ⚡ Preload Models to GPU
-                    </button>
-                </div>
             </div>
         </div>
 
