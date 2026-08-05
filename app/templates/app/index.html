@@ -814,10 +814,11 @@
                     <div class="word-history" id="wordHistory" aria-label="Collected sign words"></div>
                     
                     <div class="sentence-controls">
-                        <button id="smoothButton" disabled aria-label="Build sentence from collected words">
+                        <!-- Hidden manual build sentence button since it runs automatically -->
+                        <button id="smoothButton" style="display: none;" disabled aria-label="Build sentence from collected words">
                             ✨ Build Sentence (AI Translate)
                         </button>
-                        <button id="clearButton" aria-label="Clear collected words">
+                        <button id="clearButton" style="width: 100%;" aria-label="Clear collected words">
                             ✕ Reset Session
                         </button>
                     </div>
@@ -1302,6 +1303,9 @@
             renderWordChips();
             smoothBtn.disabled = collectedWords.length < 1;
             showToast(`Sign detected: "${word}"`, '🤟');
+            
+            // Auto trigger sentence building
+            buildSentence();
         }
 
         function renderWordChips() {
@@ -1322,6 +1326,13 @@
                     renderWordChips();
                     smoothBtn.disabled = collectedWords.length < 1;
                     showToast('Word removed', '🗑️');
+                    
+                    // Auto trigger sentence building on deletion/removal
+                    if (collectedWords.length > 0) {
+                        buildSentence();
+                    } else {
+                        smoothOutput.classList.remove('visible');
+                    }
                 });
             });
         }
