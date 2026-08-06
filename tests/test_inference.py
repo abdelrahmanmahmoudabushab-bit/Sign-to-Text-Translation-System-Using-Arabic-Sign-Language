@@ -24,6 +24,9 @@ from app.util import predict
 
 def test_random_sequence():
     dataset_dir = r"D:\signo v6\datasets\karsl-502"
+    if not os.path.exists(dataset_dir):
+        # Fallback to local Jetson Linux path
+        dataset_dir = os.path.expanduser("~/signo v6/datasets/karsl-502")
 
     # 1. Discover all sequences using shared utility
     print("Scanning dataset directory to pick a test sample...")

@@ -24,6 +24,9 @@ from app.util import predict
 
 def simulate_sentence_translation(num_words=4):
     dataset_dir = r"D:\signo v6\datasets\karsl-502"
+    if not os.path.exists(dataset_dir):
+        # Fallback to local Jetson Linux path
+        dataset_dir = os.path.expanduser("~/signo v6/datasets/karsl-502")
 
     # 1. Discover all sequences using shared utility
     print("Scanning dataset directory to select multiple word signs...")
