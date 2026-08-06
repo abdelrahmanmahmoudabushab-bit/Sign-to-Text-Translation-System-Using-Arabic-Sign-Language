@@ -20,6 +20,7 @@ _idx_to_arabic: Dict[int, str] = {}
 _norm_mean: Optional[np.ndarray] = None
 _norm_std: Optional[np.ndarray] = None
 _initialized = False
+_PREDICTION_CACHE: Dict[str, list] = {}
 
 
 def _get_cache_candidates():
@@ -110,6 +111,16 @@ def _init():
                 logger.warning("Failed to load norm stats from %s", cache_dir, exc_info=True)
                 continue
 
+    # 4. Load persistent prediction disk cache
+    cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json")
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                _PREDICTION_CACHE.update(json.load(f))
+            logger.info("Loaded %d persistent predictions from disk cache", len(_PREDICTION_CACHE))
+        except Exception as e:
+            logger.warning("Failed to load prediction disk cache: %s", e)
+
 def _save_prediction_cache():
     global _PREDICTION_CACHE
     cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json")
@@ -156,17 +167,6 @@ def _predict_coordinates(
 
     # Pipeline LRU Memory Cache Lookup (0.1ms repeat lookup)
     global _PREDICTION_CACHE
-    if "_PREDICTION_CACHE" not in globals():
-        _PREDICTION_CACHE = {}
-        # Load persistent disk cache
-        cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json")
-        if os.path.exists(cache_file):
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    _PREDICTION_CACHE = json.load(f)
-                logger.info("Loaded %d persistent predictions from disk cache", len(_PREDICTION_CACHE))
-            except Exception as e:
-                logger.warning("Failed to load prediction disk cache: %s", e)
 
     # Discretize array to 3 decimal places to create robust spatial hash key
     keypoint_hash = hashlib.md5(np.round(x, decimals=3).tobytes()).hexdigest()

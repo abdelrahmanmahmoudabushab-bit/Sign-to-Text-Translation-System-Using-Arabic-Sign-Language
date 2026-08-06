@@ -1,5 +1,6 @@
 import requests
 import json
+import logging
 import os
 
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/generate"
@@ -7,6 +8,8 @@ OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/gen
 VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2-vl:2b")            # Vision Classifier
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen2.5:3b")         # Arbitration Judge
 TRANSLATOR_MODEL = os.environ.get("TRANSLATOR_MODEL", "qwen2.5:3b") # Sentence Grammar Reconstructor
+
+logger = logging.getLogger(__name__)
 
 def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model=TRANSLATOR_MODEL):
     """
@@ -73,7 +76,7 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
             }
             
     except Exception as e:
-        print(f"Ollama integration warning: {e}")
+        logger.warning("Ollama integration warning: %s", e)
         
     fallback_arabic = " ".join(words_list)
     return {
@@ -165,7 +168,7 @@ Do NOT include any extra text, markdown, explanations, or backticks.
                     grammar_annotation = " (emphasis)"
                 return matched_candidate, grammar_annotation
     except Exception as e:
-        print(f"VLM inference warning: {e}")
+        logger.warning("VLM inference warning: %s", e)
 
     return (candidates[0] if candidates else "", "")
 
@@ -263,16 +266,16 @@ Return ONLY a valid JSON object matching this exact structure:
             decided_word = data.get("decision", "").strip()
             
             if decided_word == "?":
-                print(f"Judge Agent Decision: ABSTAIN '?' (Reason: {data.get('reasoning')})")
+                logger.info("Judge Agent Decision: ABSTAIN '?' (Reason: %s)", data.get('reasoning'))
                 return "?"
             
             # Ensure the decided word is strictly in the candidates list
             for candidate in candidates:
                 if decided_word == candidate.strip():
-                    print(f"Judge Agent Decision: {candidate} (Reason: {data.get('reasoning')})")
+                    logger.info("Judge Agent Decision: %s (Reason: %s)", candidate, data.get('reasoning'))
                     return candidate
     except Exception as e:
-        print(f"Judge Agent debate failed: {e}")
+        logger.warning("Judge Agent debate failed: %s", e)
 
     # Fallback if Ollama fails or Judge outputs an invalid word
     return pred_vlm if lstm_confidence < 0.6 else pred_lstm
@@ -294,7 +297,8 @@ def _preload_gpu_models():
         except Exception:
             pass
 
-# Start the background thread
+# Start the background thread only during actual server runtime (not during migrate, collectstatic, etc.)
 import threading
-threading.Thread(target=_preload_gpu_models, daemon=True).start()
+if os.environ.get('RUN_MAIN') == 'true' or os.environ.get('DJANGO_DEBUG', 'True').lower() == 'false':
+    threading.Thread(target=_preload_gpu_models, daemon=True).start()
 

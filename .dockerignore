@@ -17,15 +17,8 @@ __pycache__/
 datasets/
 
 # ─── Training scripts & logs (not needed in production) ─────────
-train.py
-train_from_landmarks.py
-extract_keypoints_parallel.py
-run_parallel_chunks.py
-monitor_and_train.py
-download_karsl.py
-translate_vocab.py
-test_inference.py
-test_sentence.py
+scripts/
+tests/
 test_err.log
 test_out.log
 extract_chunk_*.log

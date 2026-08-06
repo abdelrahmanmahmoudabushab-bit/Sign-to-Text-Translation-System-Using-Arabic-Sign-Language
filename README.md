@@ -97,7 +97,7 @@ flowchart TD
 * **Deterministic Greedy Decoding (`temperature=0.0`):** Applied across all VLM and LLM inference calls to eliminate token hallucination.
 * **Strict Candidate Whitelisting:** Both the VLM and Judge LLM outputs are programmatically constrained to strictly match valid items from the Top-5 candidate list.
 * **Hand Motion Rest-Gating Filter:** Standard deviation analysis (`std < 0.002`) on hand keypoints suppresses false-positive word predictions when the user is at rest.
-* **High-Confidence Fast-Path ($\ge 88\%$):** If CNN-LSTM confidence is $\ge 88\%$, the result returns in **< 10ms**, bypassing the VLM.
+* **High-Confidence Fast-Path ($\ge 95\%$):** If CNN-LSTM confidence is $\ge 95\%$, the result returns in **< 10ms**, bypassing the VLM.
 
 ### 3. NVIDIA Jetson Orin Nano TensorRT FP16 Engine
 * **Automated ONNX & TensorRT Converter (`scripts/export_tensorrt.py`):** Converts `conv1_lstm.keras` ➔ `conv1_lstm.onnx` ➔ `conv1_lstm.engine`.

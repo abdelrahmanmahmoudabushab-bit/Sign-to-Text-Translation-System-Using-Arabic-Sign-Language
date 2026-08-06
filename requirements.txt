@@ -23,6 +23,7 @@ imageio==2.37.4
 
 # Web & API
 requests==2.34.2
+gunicorn>=23.0.0
 
 # Utilities
 psutil>=5.9.0

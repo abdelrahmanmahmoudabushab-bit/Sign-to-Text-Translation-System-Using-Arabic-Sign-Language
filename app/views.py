@@ -72,6 +72,7 @@ def upload_video(request):
         request.session['translation_history'] = history
 
         # ── Save clip to database ────────────────────────────────────────────
+        clip_id = None
         try:
             from app.models import TranslationClip
             from django.core.files import File
@@ -84,6 +85,8 @@ def upload_video(request):
                     confidence=0.0,   # placeholder; update if model returns score
                 )
                 clip.video.save(os.path.basename(video_path), File(f), save=True)
+
+            clip_id = clip.pk
 
             # Track clip IDs in session for sentence linking
             pending = request.session.get('pending_clip_ids', [])
@@ -125,7 +128,7 @@ def upload_video(request):
         return JsonResponse({
             'status': 'success',
             'message': prediction,
-            'clip_id': clip.pk if 'clip' in dir() else None,
+            'clip_id': clip_id,
             'dialect': dialect,
             'history_count': len(history),
             'timestamp': time.strftime('%H:%M:%S')
