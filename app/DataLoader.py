@@ -157,7 +157,7 @@ class DataLoader:
         with DataLoader.mp_holistic.Holistic(
             min_detection_confidence=0.5, min_tracking_confidence=0.5
         ) as holistic:
-            while True:
+            while len(results_list) < N_FRAMES:
                 ret, image = cap.read()
                 if not ret:
                     logger.debug("End of video file reached or no frames to read")
