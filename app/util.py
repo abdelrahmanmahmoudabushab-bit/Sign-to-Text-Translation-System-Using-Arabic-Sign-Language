@@ -52,87 +52,88 @@ def _init():
         if _initialized:  # Double-check after acquiring lock
             return
 
-    # 1. Load model: Try TensorRT engine -> ONNX Runtime -> TensorFlow Keras
-    engine_path = os.path.join(os.path.dirname(__file__), "conv1_lstm.engine")
-    onnx_path = os.path.join(os.path.dirname(__file__), "conv1_lstm.onnx")
-    keras_path = os.path.join(os.path.dirname(__file__), "conv1_lstm.keras")
+        # 1. Load model: Try TensorRT engine -> ONNX Runtime -> TensorFlow Keras
+        engine_path = os.path.join(os.path.dirname(__file__), "conv1_lstm.engine")
+        onnx_path = os.path.join(os.path.dirname(__file__), "conv1_lstm.onnx")
+        keras_path = os.path.join(os.path.dirname(__file__), "conv1_lstm.keras")
 
-    if os.path.exists(engine_path):
-        try:
-            from app.trt_runner import TensorRTRunner
-            runner = TensorRTRunner(engine_path)
-            _model = {"type": "tensorrt", "runner": runner}
-            logger.info("⚡ High-Performance TensorRT Engine loaded & warmed up at %s", engine_path)
-        except Exception as trt_err:
-            logger.info("TensorRT engine build/load failed (%s). Trying ONNX / Keras fallback.", trt_err)
-
-    if _model is None and os.path.exists(onnx_path):
-        try:
-            import onnxruntime as ort
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            session = ort.InferenceSession(onnx_path, providers=providers)
-            logger.info("⚡ ONNX Runtime GPU Session loaded from %s (Provider: %s)", onnx_path, session.get_providers()[0])
-            _model = {"type": "onnx", "session": session}
-        except ImportError:
-            logger.info("onnxruntime not installed. Falling back to TensorFlow Keras.")
-
-    if _model is None and os.path.exists(keras_path):
-        import tensorflow as tf
-        # Patch NVIDIA Jetson TensorFlow internal namespace for Keras 2 compatibility
-        for target in (getattr(tf, "__internal__", None), getattr(getattr(tf, "compat", None), "v2", None) and getattr(tf.compat.v2, "__internal__", None)):
-            if target and not hasattr(target, "register_load_context_function"):
-                setattr(target, "register_load_context_function", getattr(target, "register_call_context_function", lambda x: None))
-        try:
-            import tf_keras as keras_loader
-            model_obj = keras_loader.models.load_model(keras_path, compile=False)
-        except Exception:
-            model_obj = tf.keras.models.load_model(keras_path, compile=False)
-        _model = {"type": "keras", "model": model_obj}
-        logger.info("Model loaded from %s (Keras Engine)", keras_path)
-    elif _model is None:
-        logger.warning("No model file (keras, onnx, or engine) found at %s", keras_path)
-
-    # 2. Load label mapping
-    for cache_dir in _get_cache_candidates():
-        mapping_path = os.path.join(cache_dir, "label_mapping.json")
-        if os.path.exists(mapping_path):
+        if os.path.exists(engine_path):
             try:
-                with open(mapping_path, "r", encoding="utf-8") as f:
-                    mapping_data = json.load(f)
-                _idx_to_arabic = {
-                    int(k): v for k, v in mapping_data.get("idx_to_arabic", {}).items()
-                }
-                logger.info("Loaded label mapping from %s (%d classes)", mapping_path, len(_idx_to_arabic))
-                break
-            except Exception:
-                logger.warning("Failed to load label mapping from %s", mapping_path, exc_info=True)
-                continue
+                from app.trt_runner import TensorRTRunner
+                runner = TensorRTRunner(engine_path)
+                _model = {"type": "tensorrt", "runner": runner}
+                logger.info("⚡ High-Performance TensorRT Engine loaded & warmed up at %s", engine_path)
+            except Exception as trt_err:
+                logger.info("TensorRT engine build/load failed (%s). Trying ONNX / Keras fallback.", trt_err)
 
-    # 3. Load normalization stats
-    for cache_dir in _get_cache_candidates():
-        mean_path = os.path.join(cache_dir, "norm_mean.npy")
-        std_path = os.path.join(cache_dir, "norm_std.npy")
-        if os.path.exists(mean_path) and os.path.exists(std_path):
+        if _model is None and os.path.exists(onnx_path):
             try:
-                _norm_mean = np.load(mean_path)
-                _norm_std = np.load(std_path)
-                logger.info("Loaded normalization stats from %s", cache_dir)
-                break
+                import onnxruntime as ort
+                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                session = ort.InferenceSession(onnx_path, providers=providers)
+                logger.info("⚡ ONNX Runtime GPU Session loaded from %s (Provider: %s)", onnx_path, session.get_providers()[0])
+                _model = {"type": "onnx", "session": session}
+            except ImportError:
+                logger.info("onnxruntime not installed. Falling back to TensorFlow Keras.")
+
+        if _model is None and os.path.exists(keras_path):
+            import tensorflow as tf
+            # Patch NVIDIA Jetson TensorFlow internal namespace for Keras 2 compatibility
+            for target in (getattr(tf, "__internal__", None), getattr(getattr(tf, "compat", None), "v2", None) and getattr(tf.compat.v2, "__internal__", None)):
+                if target and not hasattr(target, "register_load_context_function"):
+                    setattr(target, "register_load_context_function", getattr(target, "register_call_context_function", lambda x: None))
+            try:
+                import tf_keras as keras_loader
+                model_obj = keras_loader.models.load_model(keras_path, compile=False)
             except Exception:
-                logger.warning("Failed to load norm stats from %s", cache_dir, exc_info=True)
-                continue
+                model_obj = tf.keras.models.load_model(keras_path, compile=False)
+            _model = {"type": "keras", "model": model_obj}
+            logger.info("Model loaded from %s (Keras Engine)", keras_path)
+        elif _model is None:
+            logger.warning("No model file (keras, onnx, or engine) found at %s", keras_path)
 
-    # 4. Load persistent prediction disk cache
-    cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json")
-    if os.path.exists(cache_file):
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                _PREDICTION_CACHE.update(json.load(f))
-            logger.info("Loaded %d persistent predictions from disk cache", len(_PREDICTION_CACHE))
-        except Exception as e:
-            logger.warning("Failed to load prediction disk cache: %s", e)
+        # 2. Load label mapping
+        for cache_dir in _get_cache_candidates():
+            mapping_path = os.path.join(cache_dir, "label_mapping.json")
+            if os.path.exists(mapping_path):
+                try:
+                    with open(mapping_path, "r", encoding="utf-8") as f:
+                        mapping_data = json.load(f)
+                    _idx_to_arabic = {
+                        int(k): v for k, v in mapping_data.get("idx_to_arabic", {}).items()
+                    }
+                    logger.info("Loaded label mapping from %s (%d classes)", mapping_path, len(_idx_to_arabic))
+                    break
+                except Exception:
+                    logger.warning("Failed to load label mapping from %s", mapping_path, exc_info=True)
+                    continue
 
-    _initialized = True
+        # 3. Load normalization stats
+        for cache_dir in _get_cache_candidates():
+            mean_path = os.path.join(cache_dir, "norm_mean.npy")
+            std_path = os.path.join(cache_dir, "norm_std.npy")
+            if os.path.exists(mean_path) and os.path.exists(std_path):
+                try:
+                    _norm_mean = np.load(mean_path)
+                    _norm_std = np.load(std_path)
+                    logger.info("Loaded normalization stats from %s", cache_dir)
+                    break
+                except Exception:
+                    logger.warning("Failed to load norm stats from %s", cache_dir, exc_info=True)
+                    continue
+
+        # 4. Load persistent prediction disk cache
+        cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    _PREDICTION_CACHE.update(json.load(f))
+                logger.info("Loaded %d persistent predictions from disk cache", len(_PREDICTION_CACHE))
+            except Exception as e:
+                logger.warning("Failed to load prediction disk cache: %s", e)
+
+        _initialized = True
+
 
 def _save_prediction_cache():
     """Persist prediction cache to disk atomically (write to temp, then rename)."""
@@ -259,22 +260,6 @@ def _predict_coordinates(
         "is_rest": False
     }
 
-
-def predict(x: np.ndarray = None, video_path: str = None, history: list = None, dialect: str = 'Saudi Arabic Sign Language') -> str:
-    """Run model prediction on preprocessed keypoint data and return Arabic label.
-    Supports parallel pipeline (when x is None) or sequential fallback.
-    """
-    global _PREDICTION_CACHE
-    from app.telemetry import log_inference_event
-
-    start_t = time.time()
-    _init()
-
-    if _model is None:
-        return "Model file (conv1_lstm.keras) not found."
-
-    if history is None:
-        history = []
 
 def _arbitrate_prediction(
     pred_lstm: str,
