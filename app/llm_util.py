@@ -6,9 +6,9 @@ import re
 
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
-VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2-vl:2b")            # Vision Classifier
-JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen2.5:3b")         # Arbitration Judge
-TRANSLATOR_MODEL = os.environ.get("TRANSLATOR_MODEL", "qwen2.5:3b") # Sentence Grammar Reconstructor
+VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2.5vl:3b")            # Vision Classifier
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "llama3.2:3b")         # Arbitration Judge
+TRANSLATOR_MODEL = os.environ.get("TRANSLATOR_MODEL", "llama3.2:3b") # Grammar Reconstructor
 
 logger = logging.getLogger(__name__)
 
