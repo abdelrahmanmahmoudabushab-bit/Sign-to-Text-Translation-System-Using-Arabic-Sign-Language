@@ -189,10 +189,6 @@ def main():
                 ema_delta = frame_delta
             else:
                 ema_delta = 0.2 * frame_delta + 0.8 * ema_delta
-
-            # Print diagnostic motion delta to terminal
-            if ema_delta > 0.0005:
-                print(f"DEBUG - Frame Delta: {frame_delta:.6f} | EMA: {ema_delta:.6f} | Still Ticks: {still_ticks} | Signing: {is_signing}")
                 
             if ema_delta > 0.0035:  # Active movement threshold (tested with smoothed EMA)
                 is_signing = True
