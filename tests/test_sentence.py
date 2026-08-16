@@ -36,8 +36,24 @@ def simulate_sentence_translation(num_words=4):
         print("No test sequences found.")
         return
 
-    # 2. Pick N random sample sequences to construct a "signed sentence"
-    signed_sentence = [random.choice(sequences) for _ in range(num_words)]
+    # 2. Pick N random sample sequences to construct a "signed sentence" (filtering out empty directories)
+    random.shuffle(sequences)
+    signed_sentence = []
+    for candidate in sequences:
+        frames_dir, sign_id = candidate
+        if os.path.exists(frames_dir):
+            try:
+                images = [f for f in os.listdir(frames_dir) if f.lower().endswith(('.jpg', '.png'))]
+                if len(images) >= 5:
+                    signed_sentence.append(candidate)
+                    if len(signed_sentence) == num_words:
+                        break
+            except OSError:
+                pass
+
+    if len(signed_sentence) < num_words:
+        print("Not enough non-empty test sequences found.")
+        return
 
     print("\n" + "="*60)
     true_words = []

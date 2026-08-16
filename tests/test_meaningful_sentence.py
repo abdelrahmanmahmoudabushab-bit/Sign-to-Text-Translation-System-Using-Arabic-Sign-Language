@@ -34,15 +34,34 @@ def run_meaningful_sentence_test():
     selected_sequences = []
 
     for tid in target_ids:
-        # Find a sequence matching this Sign ID
-        match = next((s for s in sequences if s[1] == tid), None)
-        if match:
-            selected_sequences.append(match)
+        # Find a sequence matching this Sign ID and containing images
+        matches = [s for s in sequences if s[1] == tid]
+        valid_match = None
+        for m in matches:
+            m_path = m[0]
+            if os.path.exists(m_path):
+                try:
+                    images = [f for f in os.listdir(m_path) if f.lower().endswith(('.jpg', '.png'))]
+                    if len(images) >= 5:
+                        valid_match = m
+                        break
+                except OSError:
+                    pass
+        if valid_match:
+            selected_sequences.append(valid_match)
         else:
-            # Fallback to any valid sequence if target word is missing
-            fallback = next((s for s in sequences if s not in selected_sequences), None)
-            if fallback:
-                selected_sequences.append(fallback)
+            # Fallback to any valid sequence if target word is missing or empty
+            for candidate in sequences:
+                if candidate not in selected_sequences:
+                    c_path = candidate[0]
+                    if os.path.exists(c_path):
+                        try:
+                            images = [f for f in os.listdir(c_path) if f.lower().endswith(('.jpg', '.png'))]
+                            if len(images) >= 5:
+                                selected_sequences.append(candidate)
+                                break
+                        except OSError:
+                            pass
 
     print("\n" + "=" * 60)
     print("CONSTRUCTING MEANINGFUL SIGN SENTENCE")
