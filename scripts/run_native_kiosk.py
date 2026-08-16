@@ -10,6 +10,7 @@ import os
 import sys
 import argparse
 import time
+import base64
 import numpy as np
 import cv2
 import mediapipe as mp
@@ -106,6 +107,7 @@ def main():
 
     # Kiosk State Variables
     frame_buffer = []
+    visual_frame_buffer = [] # Buffer of video frames for VLM storyboard
     collected_words = []
     reconstructed_sentence = ""
     reconstructed_english = ""
@@ -140,11 +142,13 @@ def main():
                     reconstructed_sentence = ""
                     reconstructed_english = ""
                     frame_buffer = []
+                    visual_frame_buffer = []
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1: # Left Click
                     if btn_start_stop.collidepoint(mouse_pos):
                         is_active = not is_active
                         frame_buffer = []
+                        visual_frame_buffer = []
                         prev_keypoints = None
                         ema_delta = 0.0
                         is_signing = False
@@ -155,6 +159,7 @@ def main():
                         reconstructed_sentence = ""
                         reconstructed_english = ""
                         frame_buffer = []
+                        visual_frame_buffer = []
                         print("[ACTION] Session cleared.")
                     elif btn_dialect.collidepoint(mouse_pos):
                         idx = (dialects.index(current_dialect) + 1) % len(dialects)
@@ -178,9 +183,14 @@ def main():
             keypoints = DataLoader.extract_keypoints(results)
             frame_buffer.append(keypoints)
 
-            # Keep sliding buffer at N_FRAMES (60)
+            # Store resized visual frame for VLM storyboard
+            visual_frame_buffer.append(cv2.resize(frame, (320, 240)))
+
+            # Keep sliding buffers at N_FRAMES (60)
             if len(frame_buffer) > N_FRAMES:
                 frame_buffer.pop(0)
+            if len(visual_frame_buffer) > N_FRAMES:
+                visual_frame_buffer.pop(0)
 
             # Motion Check for pause-segmentation
             if prev_keypoints is not None:
@@ -202,8 +212,19 @@ def main():
                             while len(frame_buffer) < N_FRAMES:
                                 frame_buffer.append(np.zeros(N_KEYPOINTS))
                             
+                            # Prepare base64 frames for local VLM arbitration
+                            base64_frames = []
+                            total_vf = len(visual_frame_buffer)
+                            if total_vf >= 6:
+                                indices = [int(total_vf * (i + 0.5) / 6) for i in range(6)]
+                                for idx in indices:
+                                    if idx < total_vf:
+                                        _, buf = cv2.imencode('.jpg', visual_frame_buffer[idx])
+                                        b64_str = base64.b64encode(buf).decode('utf-8')
+                                        base64_frames.append(b64_str)
+
                             x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                            pred_word = predict(x=x_input, dialect=current_dialect)
+                            pred_word = predict(x=x_input, dialect=current_dialect, base64_frames=base64_frames, history=collected_words)
 
                             if pred_word and pred_word != "?" and pred_word != "-":
                                 if not collected_words or collected_words[-1] != pred_word:
@@ -219,6 +240,7 @@ def main():
                             
                             # Reset segmentation state
                             frame_buffer = []
+                            visual_frame_buffer = []
                             is_signing = False
                             still_ticks = 0
                             ema_delta = 0.0

@@ -418,7 +418,7 @@ def _arbitrate_prediction(
     return final_pred
 
 
-def predict(x: np.ndarray = None, video_path: str = None, history: list = None, dialect: str = 'Saudi Arabic Sign Language') -> str:
+def predict(x: np.ndarray = None, video_path: str = None, history: list = None, dialect: str = 'Saudi Arabic Sign Language', base64_frames: list = None) -> str:
     """Run model prediction on preprocessed keypoint data or raw video, and return Arabic label."""
     start_t = time.time()
     _init()
@@ -435,14 +435,17 @@ def predict(x: np.ndarray = None, video_path: str = None, history: list = None, 
         if res.get("is_rest", False) or res.get("is_cache_hit", False):
             return res["pred_lstm"]
 
+        # If base64_frames is provided, we simulate a video path to allow VLM arbitration
+        effective_video_path = video_path or ("live_kiosk.mp4" if base64_frames else None)
+
         return _arbitrate_prediction(
             pred_lstm=res["pred_lstm"],
             lstm_confidence=res["lstm_confidence"],
             candidates=res["candidates"],
             candidate_confidences=res.get("candidate_confidences", []),
             keypoint_hash=res["keypoint_hash"],
-            video_path=video_path,
-            base64_frames=None,
+            video_path=effective_video_path,
+            base64_frames=base64_frames,
             history=history,
             dialect=dialect,
             start_t=start_t
