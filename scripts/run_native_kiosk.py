@@ -118,6 +118,7 @@ def main():
     is_signing = False
     prev_keypoints = None
     ema_delta = 0.0
+    debug_tick = 0  # Counter for periodic debug output
     is_active = False # Tracks if camera processing is active
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
@@ -189,25 +190,38 @@ def main():
             # Motion Check for pause-segmentation
             if prev_keypoints is not None:
                 frame_delta = np.mean(np.abs(keypoints - prev_keypoints))
-                # Calculate EMA of delta to filter coordinate jitter (alpha = 0.2)
+                # Calculate EMA of delta to filter coordinate jitter (alpha = 0.3)
                 if ema_delta == 0.0:
                     ema_delta = frame_delta
                 else:
-                    ema_delta = 0.2 * frame_delta + 0.8 * ema_delta
+                    ema_delta = 0.3 * frame_delta + 0.7 * ema_delta
+                
+                # Debug: log motion stats every 30 frames (~1s)
+                debug_tick += 1
+                if debug_tick % 30 == 0:
+                    print(f"[MOTION] ema={ema_delta:.5f} raw={frame_delta:.5f} signing={is_signing} still_ticks={still_ticks} buf={len(frame_buffer)}")
                     
-                if ema_delta > 0.0035:  # Active movement threshold (tested with smoothed EMA)
+                if ema_delta > 0.002:  # Active movement threshold
+                    if not is_signing:
+                        print(f"[STATE] Signing STARTED (ema={ema_delta:.5f})")
                     is_signing = True
                     still_ticks = 0
                 else:
                     if is_signing:
                         still_ticks += 1
-                        if still_ticks >= 15: # ~500ms of stable EMA stillness (reduced for faster response)
-                            print("Pause detected. Running inference...")
+                        if still_ticks >= 12: # ~400ms of stable EMA stillness
+                            print(f"Pause detected. Running inference... (buf={len(frame_buffer)})")
                             while len(frame_buffer) < N_FRAMES:
                                 frame_buffer.append(np.zeros(N_KEYPOINTS))
                             
                             x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                            pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
+                            try:
+                                pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
+                                print(f"[PREDICT] Result: {repr(pred_word)}")
+                            except Exception as e:
+                                print(f"[PREDICT] FAILED: {e}")
+                                import traceback; traceback.print_exc()
+                                pred_word = None
 
                             if pred_word and pred_word != "?" and pred_word != "-":
                                 if not collected_words or collected_words[-1] != pred_word:
@@ -226,6 +240,7 @@ def main():
                             is_signing = False
                             still_ticks = 0
                             ema_delta = 0.0
+                            print("[STATE] Signing ENDED, buffers reset")
 
             prev_keypoints = keypoints
 
