@@ -4,7 +4,10 @@ import logging
 import os
 import re
 
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+# Detect if running on NVIDIA Jetson target
+is_jetson = os.path.exists("/etc/nv_tegra_release")
+default_host = "http://localhost:11435" if is_jetson else "http://localhost:11434"
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", default_host)
 
 VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2.5vl:3b")            # Vision Classifier
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "llama3.2:3b")         # Arbitration Judge
