@@ -202,7 +202,7 @@ def main():
                 if debug_tick % 30 == 0:
                     print(f"[MOTION] ema={ema_delta:.5f} raw={frame_delta:.5f} signing={is_signing} still_ticks={still_ticks} buf={len(frame_buffer)}")
                     
-                if ema_delta > 0.002:  # Active movement threshold
+                if ema_delta > 0.008:  # Active movement threshold (upper body + hands noise floor is ~0.004-0.005)
                     if not is_signing:
                         print(f"[STATE] Signing STARTED (ema={ema_delta:.5f})")
                     is_signing = True
