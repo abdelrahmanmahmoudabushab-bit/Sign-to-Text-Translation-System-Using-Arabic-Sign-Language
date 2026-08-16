@@ -114,13 +114,14 @@ def main():
     is_signing = False
     prev_keypoints = None
     ema_delta = 0.0
+    is_active = False # Tracks if camera processing is active
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
     # Button Rectangles
-    btn_clear = pygame.Rect(700, 100, 280, 60)
-    btn_dialect = pygame.Rect(700, 190, 280, 60)
-    btn_reset_cam = pygame.Rect(700, 280, 280, 60)
+    btn_start_stop = pygame.Rect(700, 100, 280, 60)
+    btn_clear = pygame.Rect(700, 190, 280, 60)
+    btn_dialect = pygame.Rect(700, 280, 280, 60)
     btn_exit = pygame.Rect(700, 370, 280, 60)
 
     running = True
@@ -141,23 +142,24 @@ def main():
                     frame_buffer = []
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1: # Left Click
-                    if btn_clear.collidepoint(mouse_pos):
+                    if btn_start_stop.collidepoint(mouse_pos):
+                        is_active = not is_active
+                        frame_buffer = []
+                        prev_keypoints = None
+                        ema_delta = 0.0
+                        is_signing = False
+                        still_ticks = 0
+                        print(f"[STATUS] Kiosk processing {'STARTED' if is_active else 'STOPPED'}")
+                    elif btn_clear.collidepoint(mouse_pos):
                         collected_words = []
                         reconstructed_sentence = ""
                         reconstructed_english = ""
                         frame_buffer = []
-                        print("Session cleared.")
+                        print("[ACTION] Session cleared.")
                     elif btn_dialect.collidepoint(mouse_pos):
                         idx = (dialects.index(current_dialect) + 1) % len(dialects)
                         current_dialect = dialects[idx]
-                        print(f"Dialect switched to: {current_dialect}")
-                    elif btn_reset_cam.collidepoint(mouse_pos):
-                        cap.release()
-                        cap = cv2.VideoCapture(args.camera)
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                        frame_buffer = []
-                        print("Webcam device re-initialized.")
+                        print(f"[ACTION] Dialect switched to: {current_dialect}")
                     elif btn_exit.collidepoint(mouse_pos):
                         running = False
 
@@ -169,63 +171,72 @@ def main():
         # Flip horizontally for natural mirror effect
         frame = cv2.flip(frame, 1)
 
-        # Process landmarks
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = holistic.process(rgb_frame)
+        results = None
+        if is_active:
+            # Process landmarks
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = holistic.process(rgb_frame)
 
-        # Extract normalized coordinates
-        keypoints = DataLoader.extract_keypoints(results)
-        frame_buffer.append(keypoints)
+            # Extract normalized coordinates
+            keypoints = DataLoader.extract_keypoints(results)
+            frame_buffer.append(keypoints)
 
-        # Keep sliding buffer at N_FRAMES (60)
-        if len(frame_buffer) > N_FRAMES:
-            frame_buffer.pop(0)
+            # Keep sliding buffer at N_FRAMES (60)
+            if len(frame_buffer) > N_FRAMES:
+                frame_buffer.pop(0)
 
-        # Motion Check for pause-segmentation
-        if prev_keypoints is not None:
-            frame_delta = np.mean(np.abs(keypoints - prev_keypoints))
-            # Calculate EMA of delta to filter coordinate jitter (alpha = 0.2)
-            if ema_delta == 0.0:
-                ema_delta = frame_delta
-            else:
-                ema_delta = 0.2 * frame_delta + 0.8 * ema_delta
-                
-            if ema_delta > 0.0035:  # Active movement threshold (tested with smoothed EMA)
-                is_signing = True
-                still_ticks = 0
-            else:
-                if is_signing:
-                    still_ticks += 1
-                    if still_ticks >= 15: # ~500ms of stable EMA stillness (reduced for faster response)
-                        print("Pause detected. Running inference...")
-                        while len(frame_buffer) < N_FRAMES:
-                            frame_buffer.append(np.zeros(N_KEYPOINTS))
-                        
-                        x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                        pred_word = predict(x=x_input, dialect=current_dialect)
+            # Motion Check for pause-segmentation
+            if prev_keypoints is not None:
+                frame_delta = np.mean(np.abs(keypoints - prev_keypoints))
+                # Calculate EMA of delta to filter coordinate jitter (alpha = 0.2)
+                if ema_delta == 0.0:
+                    ema_delta = frame_delta
+                else:
+                    ema_delta = 0.2 * frame_delta + 0.8 * ema_delta
+                    
+                if ema_delta > 0.0035:  # Active movement threshold (tested with smoothed EMA)
+                    is_signing = True
+                    still_ticks = 0
+                else:
+                    if is_signing:
+                        still_ticks += 1
+                        if still_ticks >= 15: # ~500ms of stable EMA stillness (reduced for faster response)
+                            print("Pause detected. Running inference...")
+                            while len(frame_buffer) < N_FRAMES:
+                                frame_buffer.append(np.zeros(N_KEYPOINTS))
+                            
+                            x_input = np.expand_dims(np.array(frame_buffer), axis=0)
+                            pred_word = predict(x=x_input, dialect=current_dialect)
 
-                        if pred_word and pred_word != "?" and pred_word != "-":
-                            if not collected_words or collected_words[-1] != pred_word:
-                                collected_words.append(pred_word)
-                                print(f"Detected: {pred_word}")
-                                
-                                try:
-                                    smooth_res = smooth_sign_sentence(collected_words, current_dialect)
-                                    reconstructed_sentence = smooth_res.get("arabic", "")
-                                    reconstructed_english = smooth_res.get("english", "")
-                                except Exception:
-                                    reconstructed_sentence = " ".join(collected_words)
-                        
-                        # Reset segmentation state
-                        frame_buffer = []
-                        is_signing = False
-                        still_ticks = 0
-                        ema_delta = 0.0
+                            if pred_word and pred_word != "?" and pred_word != "-":
+                                if not collected_words or collected_words[-1] != pred_word:
+                                    collected_words.append(pred_word)
+                                    print(f"Detected: {pred_word}")
+                                    
+                                    try:
+                                        smooth_res = smooth_sign_sentence(collected_words, current_dialect)
+                                        reconstructed_sentence = smooth_res.get("arabic", "")
+                                        reconstructed_english = smooth_res.get("english", "")
+                                    except Exception:
+                                        reconstructed_sentence = " ".join(collected_words)
+                            
+                            # Reset segmentation state
+                            frame_buffer = []
+                            is_signing = False
+                            still_ticks = 0
+                            ema_delta = 0.0
 
-        prev_keypoints = keypoints
+            prev_keypoints = keypoints
 
         # Draw MediaPipe overlays onto OpenCV frame before blitting to Pygame
-        draw_styled_landmarks(frame, results)
+        if is_active and results:
+            draw_styled_landmarks(frame, results)
+        else:
+            # Draw placeholder when paused
+            cv2.rectangle(frame, (80, 200), (560, 280), (15, 23, 42), -1)
+            cv2.rectangle(frame, (80, 200), (560, 280), (51, 65, 85), 2)
+            cv2.putText(frame, "KIOSK INACTIVE", (150, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2)
+            cv2.putText(frame, "Click Start Kiosk to translate signs", (110, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
         # Convert OpenCV frame (BGR) to Pygame surface (RGB)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -240,8 +251,13 @@ def main():
         screen.blit(frame_surf, (20, 20))
 
         # Status badge overlay on top left of video
-        status_text = "SIGNING" if is_signing else "WAITING"
-        status_color = (16, 185, 129) if is_signing else (245, 158, 11) # emerald vs amber
+        if is_active:
+            status_text = "SIGNING" if is_signing else "WAITING"
+            status_color = (16, 185, 129) if is_signing else (245, 158, 11) # emerald vs amber
+        else:
+            status_text = "INACTIVE"
+            status_color = (100, 116, 139) # slate-500 grey
+
         pygame.draw.rect(screen, (30, 41, 59), (30, 30, 160, 36), border_radius=6)
         pygame.draw.circle(screen, status_color, (45, 48), 6)
         lbl_status = font_bold.render(status_text, True, (255, 255, 255))
@@ -260,10 +276,15 @@ def main():
             text_rect = lbl_btn.get_rect(center=rect.center)
             screen.blit(lbl_btn, text_rect)
 
+        # Dynamic Start/Stop button color and label
+        if is_active:
+            draw_button(btn_start_stop, "Stop Kiosk", (220, 38, 38), (185, 28, 28)) # Dark red stops
+        else:
+            draw_button(btn_start_stop, "Start Kiosk", (16, 185, 129), (5, 150, 105)) # Green starts
+
         draw_button(btn_clear, "Clear Session", (51, 65, 85), (71, 85, 105))
         draw_button(btn_dialect, f"Dialect: {current_dialect.split()[0]}", (51, 65, 85), (71, 85, 105))
-        draw_button(btn_reset_cam, "Reset Webcam", (51, 65, 85), (71, 85, 105))
-        draw_button(btn_exit, "Exit App", (239, 68, 68), (220, 38, 38)) # Red button
+        draw_button(btn_exit, "Exit App", (71, 85, 105), (100, 116, 139))
 
         # Draw Bottom Translation Card
         pygame.draw.rect(screen, (30, 41, 59), (20, 520, 984, 220), border_radius=8)
