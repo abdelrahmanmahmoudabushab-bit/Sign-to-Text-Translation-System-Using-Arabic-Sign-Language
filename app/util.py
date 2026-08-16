@@ -175,8 +175,8 @@ def _predict_coordinates(
     hand_keypoints = x[0, :, 99:225]
     hand_motion_std = np.std(hand_keypoints)
     print(f"[INFERENCE] hand_motion_std = {hand_motion_std:.6f}")
-    if hand_motion_std < 0.002:
-        print(f"[INFERENCE] Rest position detected (hand_motion_std < 0.002) — skipping prediction")
+    if hand_motion_std < 0.0001:
+        print(f"[INFERENCE] Rest position detected (hand_motion_std < 0.0001) — skipping prediction")
         return {
             "pred_lstm": "",
             "lstm_confidence": 1.0,

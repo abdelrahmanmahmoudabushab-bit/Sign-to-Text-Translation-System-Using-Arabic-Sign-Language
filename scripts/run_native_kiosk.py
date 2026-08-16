@@ -188,9 +188,9 @@ def main():
             if len(frame_buffer) > N_FRAMES:
                 frame_buffer.pop(0)
 
-            # Motion Check for pause-segmentation
+            # Motion Check for pause-segmentation (exclude face landmarks [0:33] to eliminate tracking jitter)
             if prev_keypoints is not None:
-                frame_delta = np.mean(np.abs(keypoints - prev_keypoints))
+                frame_delta = np.mean(np.abs(keypoints[33:] - prev_keypoints[33:]))
                 # Calculate EMA of delta to filter coordinate jitter (alpha = 0.3)
                 if ema_delta == 0.0:
                     ema_delta = frame_delta
