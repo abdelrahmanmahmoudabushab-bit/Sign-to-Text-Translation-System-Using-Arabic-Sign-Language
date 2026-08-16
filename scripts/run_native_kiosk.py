@@ -119,7 +119,8 @@ def main():
     prev_keypoints = None
     ema_delta = 0.0
     debug_tick = 0  # Counter for periodic debug output
-    is_active = False # Tracks if camera processing is active
+    is_active = True # Tracks if camera processing is active (active by default)
+    print("[STATUS] Kiosk processing ACTIVE BY DEFAULT")
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
