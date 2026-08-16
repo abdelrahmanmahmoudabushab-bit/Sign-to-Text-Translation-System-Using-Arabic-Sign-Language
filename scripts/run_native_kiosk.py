@@ -183,6 +183,10 @@ def main():
         # Motion Check for pause-segmentation
         if prev_keypoints is not None:
             delta = np.mean(np.abs(keypoints - prev_keypoints))
+            # Print diagnostic motion delta to terminal
+            if delta > 0.0005:
+                print(f"DEBUG - Delta: {delta:.6f} | Still Ticks: {still_ticks} | Signing: {is_signing}")
+                
             if delta > 0.0025:  # Active movement threshold
                 is_signing = True
                 still_ticks = 0
