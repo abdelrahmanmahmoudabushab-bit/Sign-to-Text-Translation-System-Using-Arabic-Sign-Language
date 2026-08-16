@@ -33,3 +33,8 @@ deep-translator==1.11.4
 # WebSockets / Real-time Streaming
 channels==4.3.2
 daphne==4.2.3
+
+# Native Desktop GUI
+pygame==2.6.1
+arabic-reshaper==3.0.1
+python-bidi==0.6.11

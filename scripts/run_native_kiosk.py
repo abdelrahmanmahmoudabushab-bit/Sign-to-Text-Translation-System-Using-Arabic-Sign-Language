@@ -1,6 +1,6 @@
 """
 Signo — Native Desktop Sign Language Kiosk Application.
-Runs edge inference natively on Jetson with OpenCV webcam feed and MediaPipe.
+Runs edge inference natively on Jetson with OpenCV and Pygame GUI.
 
 Usage:
     python scripts/run_native_kiosk.py [--dialect "Saudi Arabic Sign Language"]
@@ -13,6 +13,9 @@ import time
 import numpy as np
 import cv2
 import mediapipe as mp
+import pygame
+import arabic_reshaper
+from bidi.algorithm import get_display
 
 # Configure console output encoding to UTF-8 for Arabic rendering
 if sys.platform.startswith('win'):
@@ -61,27 +64,47 @@ def main():
     parser.add_argument("--dialect", type=str, default="Saudi Arabic Sign Language", help="Target regional dialect")
     args = parser.parse_args()
 
-    print("====================================================================")
-    print(f" 🤟 Signo Native Desktop Kiosk (Dialect: {args.dialect})")
-    print("====================================================================")
+    # 1. Initialize Pygame
+    pygame.init()
+    pygame.display.set_caption("Signo v6 — Native Edge Translation Kiosk")
+    screen = pygame.display.set_mode((1024, 768))
+    clock = pygame.time.Clock()
 
-    # Initialize camera capture
+    # Helper function to match and load fonts
+    def get_font(size):
+        sys_fonts = ['dejavusans', 'liberationsans', 'arial', 'sans']
+        for f in sys_fonts:
+            path = pygame.font.match_font(f)
+            if path:
+                return pygame.font.Font(path, size)
+        return pygame.font.Font(None, size)
+
+    font_title = get_font(28)
+    font_body = get_font(20)
+    font_bold = get_font(22)
+    font_large_arabic = get_font(36)
+
+    def render_arabic(text, font, color):
+        reshaped = arabic_reshaper.reshape(text)
+        bidi_text = get_display(reshaped)
+        return font.render(bidi_text, True, color)
+
+    # 2. Camera Setup
     cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
         print(f"❌ Error: Could not open camera source index {args.camera}")
         return
-
-    # Set frame resolution
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    # Setup MediaPipe Holistic
+    # 3. MediaPipe Setup
     mp_holistic = mp.solutions.holistic
     holistic = mp_holistic.Holistic(
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5
     )
 
+    # Kiosk State Variables
     frame_buffer = []
     collected_words = []
     reconstructed_sentence = ""
@@ -90,10 +113,54 @@ def main():
     still_ticks = 0
     is_signing = False
     prev_keypoints = None
+    dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
+    current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
-    print("⚡ System ready. Launching display window... Press 'q' to quit.")
+    # Button Rectangles
+    btn_clear = pygame.Rect(700, 100, 280, 60)
+    btn_dialect = pygame.Rect(700, 190, 280, 60)
+    btn_reset_cam = pygame.Rect(700, 280, 280, 60)
+    btn_exit = pygame.Rect(700, 370, 280, 60)
 
-    while cap.isOpened():
+    running = True
+
+    while running:
+        # Handle Pygame Events
+        mouse_pos = pygame.mouse.get_pos()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
+                    running = False
+                elif event.key == pygame.K_c:
+                    collected_words = []
+                    reconstructed_sentence = ""
+                    reconstructed_english = ""
+                    frame_buffer = []
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1: # Left Click
+                    if btn_clear.collidepoint(mouse_pos):
+                        collected_words = []
+                        reconstructed_sentence = ""
+                        reconstructed_english = ""
+                        frame_buffer = []
+                        print("Session cleared.")
+                    elif btn_dialect.collidepoint(mouse_pos):
+                        idx = (dialects.index(current_dialect) + 1) % len(dialects)
+                        current_dialect = dialects[idx]
+                        print(f"Dialect switched to: {current_dialect}")
+                    elif btn_reset_cam.collidepoint(mouse_pos):
+                        cap.release()
+                        cap = cv2.VideoCapture(args.camera)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        frame_buffer = []
+                        print("Webcam device re-initialized.")
+                    elif btn_exit.collidepoint(mouse_pos):
+                        running = False
+
+        # Read Video Frame
         ret, frame = cap.read()
         if not ret:
             break
@@ -105,7 +172,7 @@ def main():
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = holistic.process(rgb_frame)
 
-        # Extract normalized 225 coordinates
+        # Extract normalized coordinates
         keypoints = DataLoader.extract_keypoints(results)
         frame_buffer.append(keypoints)
 
@@ -113,34 +180,30 @@ def main():
         if len(frame_buffer) > N_FRAMES:
             frame_buffer.pop(0)
 
-        # Motion / Stillness Check for auto pause-segmentation
-        # Compute mean absolute difference of coordinates between consecutive frames
+        # Motion Check for pause-segmentation
         if prev_keypoints is not None:
             delta = np.mean(np.abs(keypoints - prev_keypoints))
-            # If coordinates shift significantly over time, it's active motion
-            if delta > 0.0025:  # Empirical threshold for active hand/body gestures
+            if delta > 0.0025:  # Active movement threshold
                 is_signing = True
                 still_ticks = 0
             else:
                 if is_signing:
                     still_ticks += 1
-                    if still_ticks >= 25: # ~800ms of consecutive stillness
-                        print("Pause detected. Running gesture inference...")
-                        # Build prediction tensor: (1, 60, 225)
+                    if still_ticks >= 25: # ~800ms of stillness
+                        print("Pause detected. Running inference...")
                         while len(frame_buffer) < N_FRAMES:
                             frame_buffer.append(np.zeros(N_KEYPOINTS))
                         
                         x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                        pred_word = predict(x=x_input, dialect=args.dialect)
+                        pred_word = predict(x=x_input, dialect=current_dialect)
 
                         if pred_word and pred_word != "?" and pred_word != "-":
                             if not collected_words or collected_words[-1] != pred_word:
                                 collected_words.append(pred_word)
-                                print(f" Detected Word: {pred_word}")
+                                print(f"Detected: {pred_word}")
                                 
-                                # Trigger sentence smoothing reconstructor in background
                                 try:
-                                    smooth_res = smooth_sign_sentence(collected_words, args.dialect)
+                                    smooth_res = smooth_sign_sentence(collected_words, current_dialect)
                                     reconstructed_sentence = smooth_res.get("arabic", "")
                                     reconstructed_english = smooth_res.get("english", "")
                                 except Exception:
@@ -153,51 +216,78 @@ def main():
 
         prev_keypoints = keypoints
 
-        # Draw overlays
+        # Draw MediaPipe overlays onto OpenCV frame before blitting to Pygame
         draw_styled_landmarks(frame, results)
 
-        # Draw GUI Text Boxes
-        # Add semi-transparent black overlay at bottom
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 390), (640, 480), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+        # Convert OpenCV frame (BGR) to Pygame surface (RGB)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_surf = pygame.surfarray.make_surface(np.rot90(frame_rgb))
+        frame_surf = pygame.transform.scale(frame_surf, (640, 480))
 
-        # Draw status badge
+        # ─── Render Pygame GUI Layout ───────────────────────────────────────
+        screen.fill((15, 23, 42)) # slate-900 background
+
+        # Draw Video Card container
+        pygame.draw.rect(screen, (30, 41, 59), (18, 18, 644, 484), 2, border_radius=8) # border
+        screen.blit(frame_surf, (20, 20))
+
+        # Status badge overlay on top left of video
         status_text = "SIGNING" if is_signing else "WAITING"
-        status_color = (0, 255, 0) if is_signing else (0, 255, 255)
-        cv2.putText(frame, f"STATUS: {status_text}", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+        status_color = (16, 185, 129) if is_signing else (245, 158, 11) # emerald vs amber
+        pygame.draw.rect(screen, (30, 41, 59), (30, 30, 160, 36), border_radius=6)
+        pygame.draw.circle(screen, status_color, (45, 48), 6)
+        lbl_status = font_bold.render(status_text, True, (255, 255, 255))
+        screen.blit(lbl_status, (62, 37))
 
-        # Display accumulated glosses
-        gloss_str = " -> ".join(collected_words)
-        cv2.putText(frame, f"Glosses: {gloss_str[-45:]}", (20, 415), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # Draw Control Sidebar Panel
+        pygame.draw.rect(screen, (30, 41, 59), (680, 20, 324, 480), border_radius=8)
+        lbl_sidebar = font_title.render("Controls", True, (255, 255, 255))
+        screen.blit(lbl_sidebar, (700, 40))
 
-        # Display reconstructed Arabic sentence
+        # Render Interactive Buttons with hover transitions
+        def draw_button(rect, label, color, hover_color):
+            is_hovered = rect.collidepoint(mouse_pos)
+            pygame.draw.rect(screen, hover_color if is_hovered else color, rect, border_radius=8)
+            lbl_btn = font_bold.render(label, True, (255, 255, 255))
+            text_rect = lbl_btn.get_rect(center=rect.center)
+            screen.blit(lbl_btn, text_rect)
+
+        draw_button(btn_clear, "Clear Session", (51, 65, 85), (71, 85, 105))
+        draw_button(btn_dialect, f"Dialect: {current_dialect.split()[0]}", (51, 65, 85), (71, 85, 105))
+        draw_button(btn_reset_cam, "Reset Webcam", (51, 65, 85), (71, 85, 105))
+        draw_button(btn_exit, "Exit App", (239, 68, 68), (220, 38, 38)) # Red button
+
+        # Draw Bottom Translation Card
+        pygame.draw.rect(screen, (30, 41, 59), (20, 520, 984, 220), border_radius=8)
+        lbl_dashboard = font_title.render("Live Translation Board", True, (255, 255, 255))
+        screen.blit(lbl_dashboard, (40, 540))
+
+        # Render glosses sequence
+        gloss_str = " -> ".join(collected_words) if collected_words else "No signs recorded yet..."
+        lbl_gloss = font_body.render(f"Glosses: {gloss_str}", True, (148, 163, 184))
+        screen.blit(lbl_gloss, (40, 580))
+
+        # Render Reconstructed Arabic Sentence
         if reconstructed_sentence:
-            # Note: OpenCV putText has limited Arabic rendering support.
-            # In a native Linux GUI we fall back to printing to terminal or drawing clean overlays.
-            cv2.putText(frame, f"Sentence: {reconstructed_sentence}", (20, 445), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.putText(frame, f"English: {reconstructed_english}", (20, 468), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            lbl_sentence = render_arabic(reconstructed_sentence, font_large_arabic, (16, 185, 129))
+            screen.blit(lbl_sentence, (40, 620))
 
-        # Render window
-        cv2.imshow("Signo Native Edge Kiosk", frame)
+            lbl_english = font_body.render(f"English: {reconstructed_english}", True, (255, 255, 255))
+            screen.blit(lbl_english, (40, 680))
+        else:
+            lbl_placeholder = font_body.render("Waiting for gestures pause to translate...", True, (71, 85, 105))
+            screen.blit(lbl_placeholder, (40, 620))
 
-        # Handle keyboard exits
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q') or key == 27: # Esc or q
-            break
-        elif key == ord('c'): # Clear session
-            collected_words = []
-            reconstructed_sentence = ""
-            reconstructed_english = ""
-            frame_buffer = []
-            is_signing = False
-            print("Session cleared.")
+        # Update Display & tick clock
+        pygame.display.flip()
+        clock.tick(30) # Lock to 30 FPS to save CPU/GPU cycles
 
     # Cleanup
     cap.release()
     cv2.destroyAllWindows()
     holistic.close()
-    print("Native kiosk shut down.")
+    pygame.quit()
+    print("Native kiosk shut down successfully.")
 
 
 if __name__ == "__main__":
