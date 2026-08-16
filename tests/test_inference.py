@@ -36,23 +36,25 @@ def test_random_sequence():
         print("No test sequences found.")
         return
 
-    # 2. Pick a random sample sequence (filtering out empty directories dynamically)
-    while True:
-        test_sample = random.choice(sequences)
-        frames_dir, sign_id = test_sample
-        # Check if directory exists and contains images
+    # 2. Pick a random sample sequence (filtering out empty directories)
+    random.shuffle(sequences)
+    test_sample = None
+    for candidate in sequences:
+        frames_dir, sign_id = candidate
         if os.path.exists(frames_dir):
             try:
                 images = [f for f in os.listdir(frames_dir) if f.lower().endswith(('.jpg', '.png'))]
                 if len(images) >= 5:
+                    test_sample = candidate
                     break
             except OSError:
                 pass
-        # Remove empty folder from list so we don't pick it again
-        sequences.remove(test_sample)
-        if not sequences:
-            print("No non-empty test sequences found.")
-            return
+
+    if test_sample is None:
+        print("No non-empty test sequences found.")
+        return
+
+    frames_dir, sign_id = test_sample
 
     true_idx = actions[sign_id]
     true_label_arabic = arabic_labels.get(true_idx, "?")

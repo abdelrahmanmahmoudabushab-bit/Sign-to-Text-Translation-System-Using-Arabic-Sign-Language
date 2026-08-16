@@ -477,9 +477,18 @@
 
     <!-- Toolbar -->
     <div class="toolbar">
-        <input class="search-box" id="searchBox" type="text" placeholder="🔍  Search by Arabic or English sentence..." />
-        <button class="toolbar-btn" onclick="loadSessions(1)">🔄 Refresh</button>
-        <button class="toolbar-btn danger" id="purgeBtn" onclick="confirmPurge()">🗑️ Purge All</button>
+        <input class="search-box" id="searchBox" type="text" placeholder="🔍  Search by Arabic, English, or sign gesture..." />
+        <select class="search-box" id="dialectFilter" style="max-width: 220px; cursor: pointer;">
+            <option value="">All Dialects</option>
+            <option value="Saudi Arabic Sign Language">Saudi ArSL</option>
+            <option value="Egyptian Sign Language">Egyptian SL</option>
+            <option value="Emirati Sign Language">Emirati SL</option>
+            <option value="Unified Arabic Sign Language">Unified ArSL</option>
+        </select>
+        <button class="toolbar-btn" onclick="exportCSV()" title="Export visible session history as CSV">📥 CSV</button>
+        <button class="toolbar-btn" onclick="exportJSON()" title="Export visible session history as JSON">📥 JSON</button>
+        <button class="toolbar-btn" onclick="loadSessions(1)" title="Reload session history">🔄 Refresh</button>
+        <button class="toolbar-btn danger" id="purgeBtn" onclick="confirmPurge()" title="Purge all session history">🗑️ Purge All</button>
     </div>
 
     <!-- Grid -->
@@ -528,27 +537,76 @@
         }
 
         // ─── Filter ──────────────────────────────────────────────────────
-        document.getElementById('searchBox').addEventListener('input', (e) => {
-            const q = e.target.value.toLowerCase().trim();
-            filteredSessions = q
-                ? allSessions.filter(s =>
+        document.getElementById('searchBox').addEventListener('input', applyFilter);
+        document.getElementById('dialectFilter').addEventListener('change', applyFilter);
+
+        function applyFilter() {
+            const q = document.getElementById('searchBox').value.toLowerCase().trim();
+            const dialect = document.getElementById('dialectFilter').value;
+
+            filteredSessions = allSessions.filter(s => {
+                const matchesSearch = !q || (
                     (s.arabic || '').toLowerCase().includes(q) ||
                     (s.english || '').toLowerCase().includes(q) ||
                     s.clips.some(c => (c.gesture || '').toLowerCase().includes(q))
-                )
-                : allSessions;
+                );
+                const matchesDialect = !dialect || s.dialect === dialect;
+                return matchesSearch && matchesDialect;
+            });
             renderGrid(filteredSessions);
-        });
+        }
 
-        // ─── Render ──────────────────────────────────────────────────────
-        function applyFilter() {
-            const q = document.getElementById('searchBox').value.toLowerCase().trim();
-            filteredSessions = q
-                ? allSessions.filter(s =>
-                    (s.arabic || '').toLowerCase().includes(q) ||
-                    (s.english || '').toLowerCase().includes(q))
-                : allSessions;
-            renderGrid(filteredSessions);
+        // ─── Audio TTS Playback ──────────────────────────────────────────
+        function speakSentence(text) {
+            if (!text || !('speechSynthesis' in window)) {
+                showToast('Speech synthesis not supported on this browser');
+                return;
+            }
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ar-SA';
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+            showToast('Speaking translation... 🔊');
+        }
+
+        // ─── CSV & JSON Export ───────────────────────────────────────────
+        function exportCSV() {
+            if (!filteredSessions.length) {
+                showToast('No sessions available to export');
+                return;
+            }
+            const headers = ['ID', 'Date', 'Dialect', 'Arabic Sentence', 'English Sentence', 'Clip Count', 'Gestures'];
+            const rows = filteredSessions.map(s => [
+                s.id,
+                `"${s.created_at}"`,
+                `"${s.dialect}"`,
+                `"${(s.arabic || '').replace(/"/g, '""')}"`,
+                `"${(s.english || '').replace(/"/g, '""')}"`,
+                s.clip_count,
+                `"${s.clips.map(c => c.gesture).join(' -> ')}"`
+            ]);
+
+            const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `signo_history_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+            showToast('Exported CSV file ✓');
+        }
+
+        function exportJSON() {
+            if (!filteredSessions.length) {
+                showToast('No sessions available to export');
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(filteredSessions, null, 2));
+            const link = document.createElement('a');
+            link.href = dataStr;
+            link.download = `signo_history_${new Date().toISOString().slice(0,10)}.json`;
+            link.click();
+            showToast('Exported JSON file ✓');
         }
 
         function renderGrid(sessions) {
@@ -569,7 +627,10 @@
                             <span class="card-time">🕐 ${s.created_at}</span>
                             <span class="dialect-tag">${s.dialect}</span>
                         </div>
-                        <button class="delete-session-btn" onclick="deleteSession(${s.id})" title="Delete this session">🗑</button>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            ${s.arabic ? `<button class="toolbar-btn" style="padding:4px 10px;font-size:0.8rem;" onclick="speakSentence('${escHtml(s.arabic).replace(/'/g, "\\'")}')" title="Play audio TTS">🔊 Speak</button>` : ''}
+                            <button class="delete-session-btn" onclick="deleteSession(${s.id})" title="Delete this session">🗑</button>
+                        </div>
                     </div>
 
                     ${s.arabic || s.english ? `
@@ -591,7 +652,11 @@
                                 <span class="conf-text">Confidence: ${c.confidence}%</span>
                                 <span class="clip-time">${c.created_at}</span>
                             </div>
-                            ${c.video_url ? `<video class="clip-video" controls preload="none" src="${c.video_url}"></video>` : ''}
+                            ${c.video_url ? `
+                            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+                                <video class="clip-video" controls preload="none" src="${c.video_url}"></video>
+                                <a href="${c.video_url}" download="gesture_${c.id}.webm" class="toolbar-btn" style="padding:2px 8px;font-size:0.75rem;text-decoration:none;">📥 Download Clip</a>
+                            </div>` : ''}
                         </div>`).join('')}
                     </div>` : ''}
                 </div>

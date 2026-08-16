@@ -264,12 +264,20 @@ def evaluate_model(model, X_test, y_test):
 
 
 def main():
+    default_data_dir = r"D:\signo v6\datasets\karsl-502"
+    if not os.path.exists(default_data_dir):
+        default_data_dir = os.path.expanduser("~/signo v6/datasets/karsl-502")
+
+    default_cache_dir = r"D:\signo v6\datasets\keypoints_cache"
+    if not os.path.exists(os.path.dirname(default_cache_dir)):
+        default_cache_dir = os.path.expanduser("~/signo v6/datasets/keypoints_cache")
+
     parser = argparse.ArgumentParser(description="Train Arabic Sign Language CNN-LSTM Model")
     parser.add_argument("--data_dir", type=str,
-                       default=r"D:\signo v6\datasets\karsl-502",
+                       default=default_data_dir,
                        help="Path to KArSL-502 dataset")
     parser.add_argument("--cache_dir", type=str,
-                       default=r"D:\signo v6\datasets\keypoints_cache",
+                       default=default_cache_dir,
                        help="Path to cache extracted keypoints")
     parser.add_argument("--model_path", type=str,
                        default=None,

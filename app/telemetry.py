@@ -39,6 +39,12 @@ def log_inference_event(
             _STATS["judge_count"] += 1
         elif decision_type == "failed":
             _STATS["failed_count"] += 1
+        elif decision_type == "cache_hit":
+            _STATS["cache_hit_count"] = _STATS.get("cache_hit_count", 0) + 1
+        elif decision_type == "lstm_only":
+            _STATS["lstm_only_count"] = _STATS.get("lstm_only_count", 0) + 1
+        elif decision_type == "fallback":
+            _STATS["fallback_count"] = _STATS.get("fallback_count", 0) + 1
 
         _STATS["dialects"][dialect] = _STATS["dialects"].get(dialect, 0) + 1
         _STATS["latencies_ms"].append(latency_ms)
@@ -121,8 +127,14 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
         avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else 0.0
         
         tot = _STATS["total_requests"]
-        consensus_rate = round((_STATS["consensus_count"] / tot) * 100, 1) if tot > 0 else 100.0
-        judge_rate = round((_STATS["judge_count"] / tot) * 100, 1) if tot > 0 else 0.0
+        consensus_count = _STATS["consensus_count"]
+        judge_count = _STATS["judge_count"]
+        cache_hit_count = _STATS.get("cache_hit_count", 0)
+        lstm_only_count = _STATS.get("lstm_only_count", 0)
+        fallback_count = _STATS.get("fallback_count", 0)
+        failed_count = _STATS["failed_count"]
+        consensus_rate = round((consensus_count / tot) * 100, 1) if tot > 0 else 100.0
+        judge_rate = round((judge_count / tot) * 100, 1) if tot > 0 else 0.0
 
         logs_list = list(_LOG_HISTORY)[:30]
         dialects_dict = dict(_STATS["dialects"])
@@ -132,7 +144,10 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
     cpu_percent = psutil.cpu_percent(interval=None)
     cpu_count = psutil.cpu_count()
     mem = psutil.virtual_memory()
-    disk = psutil.disk_usage('/')
+    try:
+        disk = psutil.disk_usage(os.path.abspath(os.sep))
+    except Exception:
+        disk = psutil.disk_usage('.')
 
     uptime_sec = int(time.time() - start_time)
     hours, remainder = divmod(uptime_sec, 3600)
@@ -167,8 +182,12 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
         },
         "inference_metrics": {
             "total_requests": tot,
-            "consensus_count": _STATS["consensus_count"],
-            "judge_count": _STATS["judge_count"],
+            "consensus_count": consensus_count,
+            "judge_count": judge_count,
+            "cache_hit_count": cache_hit_count,
+            "lstm_only_count": lstm_only_count,
+            "fallback_count": fallback_count,
+            "failed_count": failed_count,
             "consensus_rate_pct": consensus_rate,
             "judge_rate_pct": judge_rate,
             "avg_latency_ms": avg_latency,

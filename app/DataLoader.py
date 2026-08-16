@@ -16,18 +16,33 @@ logger = logging.getLogger(__name__)
 N_FRAMES = 60   # N Frames Per Prediction
 N_KEYPOINTS = 225  # N Keypoints captured by mediapipe (33*3 + 21*3 + 21*3)
 
-# ─── Load label configuration from JSON ──────────────────────────────────────
+# ─── Lazy load label configuration from JSON ──────────────────────────────────
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "label_config.json")
+_config_loaded = False
 
-if os.path.exists(_CONFIG_PATH):
-    with open(_CONFIG_PATH, "r", encoding="utf-8") as _f:
-        _config = json.load(_f)
-    arabic_labels = {int(k): v for k, v in _config.get("arabic_labels", {}).items()}
-    actions = _config.get("actions", {})
-else:
-    logger.warning("label_config.json not found at %s — using empty mappings", _CONFIG_PATH)
-    arabic_labels = {}
-    actions = {}
+arabic_labels = {}
+actions = {}
+
+
+def _ensure_config_loaded():
+    global _config_loaded
+    if _config_loaded:
+        return
+    _config_loaded = True
+    if os.path.exists(_CONFIG_PATH):
+        try:
+            with open(_CONFIG_PATH, "r", encoding="utf-8") as _f:
+                _config = json.load(_f)
+            arabic_labels.update({int(k): v for k, v in _config.get("arabic_labels", {}).items()})
+            actions.update(_config.get("actions", {}))
+        except Exception as e:
+            logger.warning("Failed to parse label_config.json: %s", e)
+    else:
+        logger.warning("label_config.json not found at %s — using empty mappings", _CONFIG_PATH)
+
+
+# Initialize on module load, but wrap in function for clean retry/lazy access if needed
+_ensure_config_loaded()
 
 
 class DataLoader:

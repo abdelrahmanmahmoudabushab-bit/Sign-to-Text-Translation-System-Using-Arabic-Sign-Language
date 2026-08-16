@@ -54,7 +54,7 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir \
     django==5.2.16 \
     gunicorn==23.0.0 \
-    mediapipe==1.0.0 \
+    mediapipe==0.10.14 \
     Pillow==12.3.0 \
     requests==2.34.2 \
     psutil>=5.9.0 \

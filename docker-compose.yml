@@ -47,7 +47,7 @@ services:
     volumes:
       # Persist uploaded videos and storyboard grids across container restarts
       - signo-media:/app/media
-      # Persist SQLite database
+      # Persist SQLite database (mounts /app/db/ directory; settings.py stores db inside it)
       - signo-db:/app/db
 
     ports:

@@ -66,6 +66,14 @@ except Exception as e:
     print(f'   GPU check error: {e}')
 " 2>/dev/null
 
+# ─── Ensure TensorRT FP16 Engine is Compiled ───────────────────────────────
+if [ ! -f "app/conv1_lstm.engine" ]; then
+    echo "⚡ TensorRT FP16 engine missing — compiling on target hardware..."
+    python3 scripts/export_tensorrt.py || echo "⚠️ TensorRT compilation skipped; falling back to ONNX/Keras"
+else
+    echo "⚡ High-Performance TensorRT FP16 engine found: app/conv1_lstm.engine"
+fi
+
 echo ""
 echo "🚀 Starting Gunicorn (workers=3, threads=2)..."
 echo "═══════════════════════════════════════════════════════"

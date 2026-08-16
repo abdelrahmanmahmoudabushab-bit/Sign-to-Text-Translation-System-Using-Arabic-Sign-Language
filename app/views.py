@@ -22,7 +22,6 @@ MAX_VIDEO_SIZE = 30 * 1024 * 1024  # 30 MB
 ALLOWED_VIDEO_MIMES = {'video/webm', 'video/mp4', 'video/ogg', 'video/x-matroska', 'application/octet-stream'}
 
 
-@csrf_exempt
 @require_POST
 def upload_video(request):
     try:
@@ -49,7 +48,7 @@ def upload_video(request):
         # Save the uploaded video with unique filename and correct extension to prevent race conditions
         original_name = getattr(video_file, 'name', 'video.webm')
         ext = os.path.splitext(original_name)[1] or '.webm'
-        upload_dir = os.path.join('media', 'uploaded_videos')
+        upload_dir = os.path.join(django_settings.MEDIA_ROOT, 'uploaded_videos')
         os.makedirs(upload_dir, exist_ok=True)
         video_filename = f'video_{uuid.uuid4().hex[:8]}{ext}'
         video_path = os.path.join(upload_dir, video_filename)
@@ -104,7 +103,7 @@ def upload_video(request):
                 new_signs_dir = os.path.join(django_settings.MEDIA_ROOT, 'new_signs')
                 os.makedirs(new_signs_dir, exist_ok=True)
                 sample_id = f"sample_{int(time.time()*1000)}"
-                archived_clip = os.path.join(new_signs_dir, f"{sample_id}.webm")
+                archived_clip = os.path.join(new_signs_dir, f"{sample_id}{ext}")
                 shutil.copyfile(video_path, archived_clip)
 
                 meta_path = os.path.join(new_signs_dir, f"{sample_id}.json")
@@ -151,7 +150,6 @@ def index(request):
 
 
 
-@csrf_exempt
 @require_POST
 def smooth_sentence(request):
     """
@@ -267,7 +265,11 @@ def api_developer_logs(request):
 @csrf_exempt
 @require_POST
 def api_control_jetson(request):
-    """Execute hardware and model management actions on the Jetson Nano."""
+    """Execute hardware and model management actions on the Jetson Nano.
+    Requires staff/superuser authentication."""
+    if not (request.user.is_authenticated and request.user.is_staff):
+        return JsonResponse({'status': 'failed', 'message': 'Staff authentication required.'}, status=403)
+
     import subprocess
     try:
         data = json.loads(request.body)
@@ -378,7 +380,7 @@ def history(request):
     return render(request, 'app/history.html')
 
 
-def api_sessions(request):
+def api_sessions(request, session_id=None):
     """
     GET  /api/sessions/       — list recent TranslationSessions (JSON)
     DELETE /api/sessions/<id>/ — delete a session and its clips
@@ -386,12 +388,10 @@ def api_sessions(request):
     from app.models import TranslationSession
 
     if request.method == 'DELETE':
-        # Extract session ID from URL path
-        path_parts = request.path.rstrip('/').split('/')
-        try:
-            session_id = int(path_parts[-1])
-        except (ValueError, IndexError):
-            return JsonResponse({'status': 'failed', 'message': 'Invalid session ID.'}, status=400)
+        if not (request.user.is_authenticated and request.user.is_staff):
+            return JsonResponse({'status': 'failed', 'message': 'Staff authentication required.'}, status=403)
+        if session_id is None:
+            return JsonResponse({'status': 'failed', 'message': 'Session ID required.'}, status=400)
         try:
             sess = TranslationSession.objects.get(pk=session_id)
             # Also delete video files via clip.delete()
@@ -403,8 +403,14 @@ def api_sessions(request):
             return JsonResponse({'status': 'failed', 'message': 'Session not found.'}, status=404)
 
     # GET — return paginated list
-    page = int(request.GET.get('page', 1))
-    per_page = int(request.GET.get('per_page', 20))
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        per_page = min(100, max(1, int(request.GET.get('per_page', 20))))
+    except (ValueError, TypeError):
+        per_page = 20
     offset = (page - 1) * per_page
 
     sessions = TranslationSession.objects.prefetch_related('clips').order_by('-created_at')[offset:offset + per_page]

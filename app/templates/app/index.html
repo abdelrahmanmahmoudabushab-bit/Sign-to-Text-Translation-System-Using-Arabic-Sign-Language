@@ -1669,9 +1669,99 @@
                     color: 'rgba(255, 255, 255, 0.3)',
                     lineWidth: 2
                 });
+            // Stream coordinates in real-time over WebSocket if connected
+            if (liveSocket && liveSocket.readyState === WebSocket.OPEN) {
+                const keypoints = extractKeypoints(results);
+                liveSocket.send(JSON.stringify({
+                    keypoints: keypoints,
+                    dialect: dialectSelect.value
+                }));
             }
 
             canvasCtx.restore();
+        }
+
+        // ─── Live Real-Time WebSocket Streaming ───────────────────────────────
+        let liveSocket = null;
+        function connectLiveWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const wsUrl = wsProtocol + window.location.host + '/ws/live-translate/';
+            liveSocket = new WebSocket(wsUrl);
+
+            liveSocket.onopen = () => {
+                console.log('⚡ Live real-time WebSocket translator connected.');
+            };
+
+            liveSocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.status === 'success' && data.word) {
+                        addWord(data.word);
+                    }
+                } catch (e) {
+                    console.error("Failed to parse socket message:", e);
+                }
+            };
+
+            liveSocket.onerror = (err) => {
+                console.error('WebSocket error:', err);
+            };
+
+            liveSocket.onclose = () => {
+                console.log('WebSocket closed. Reconnecting in 3 seconds...');
+                setTimeout(connectLiveWebSocket, 3000);
+            };
+        }
+        connectLiveWebSocket();
+
+        function extractKeypoints(results) {
+            let pose = [];
+            if (results.poseLandmarks) {
+                results.poseLandmarks.forEach(pt => {
+                    pose.push(pt.x, pt.y, pt.z);
+                });
+            } else {
+                pose = new Array(33 * 3).fill(0);
+            }
+
+            let lh = [];
+            if (results.leftHandLandmarks) {
+                results.leftHandLandmarks.forEach(pt => {
+                    lh.push(pt.x, pt.y, pt.z);
+                });
+            } else {
+                lh = new Array(21 * 3).fill(0);
+            }
+
+            let rh = [];
+            if (results.rightHandLandmarks) {
+                results.rightHandLandmarks.forEach(pt => {
+                    rh.push(pt.x, pt.y, pt.z);
+                });
+            } else {
+                rh = new Array(21 * 3).fill(0);
+            }
+
+            const nose = { x: pose[0], y: pose[1], z: pose[2] };
+            const lh_wrist = { x: lh[0], y: lh[1], z: lh[2] };
+            const rh_wrist = { x: rh[0], y: rh[1], z: rh[2] };
+
+            const pose_adj = [];
+            for (let i = 0; i < 33; i++) {
+                pose_adj.push(pose[i*3] - nose.x, pose[i*3+1] - nose.y, pose[i*3+2] - nose.z);
+            }
+
+            const lh_adj = [];
+            for (let i = 0; i < 21; i++) {
+                lh_adj.push(lh[i*3] - lh_wrist.x, lh[i*3+1] - lh_wrist.y, lh[i*3+2] - lh_wrist.z);
+            }
+
+            const rh_adj = [];
+            for (let i = 0; i < 21; i++) {
+                rh_adj.push(rh[i*3] - rh_wrist.x, rh[i*3+1] - rh_wrist.y, rh[i*3+2] - rh_wrist.z);
+            }
+
+            return [...pose_adj, ...lh_adj, ...rh_adj];
         }
 
         async function startHolisticFeedback() {

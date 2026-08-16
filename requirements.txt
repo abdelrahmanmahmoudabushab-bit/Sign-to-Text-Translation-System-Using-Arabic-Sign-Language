@@ -29,3 +29,7 @@ gunicorn>=23.0.0
 psutil>=5.9.0
 kaggle==2.2.4
 deep-translator==1.11.4
+
+# WebSockets / Real-time Streaming
+channels==4.3.2
+daphne==4.2.3

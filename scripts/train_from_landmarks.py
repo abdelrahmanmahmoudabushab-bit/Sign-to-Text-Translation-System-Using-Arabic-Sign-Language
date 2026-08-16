@@ -214,12 +214,20 @@ def extract_all_landmarks(landmarks_dir: str, cache_dir: str):
 
 
 def main():
+    default_landmarks_dir = r"D:\signo v6\datasets\karsl-landmarks"
+    if not os.path.exists(default_landmarks_dir):
+        default_landmarks_dir = os.path.expanduser("~/signo v6/datasets/karsl-landmarks")
+
+    default_cache_dir = r"D:\signo v6\datasets\keypoints_cache"
+    if not os.path.exists(os.path.dirname(default_cache_dir)):
+        default_cache_dir = os.path.expanduser("~/signo v6/datasets/keypoints_cache")
+
     parser = argparse.ArgumentParser(description="Train ArSL model from pre-extracted landmarks")
     parser.add_argument("--landmarks_dir", type=str,
-                       default=r"D:\signo v6\datasets\karsl-landmarks",
+                       default=default_landmarks_dir,
                        help="Path to downloaded landmarks dataset")
     parser.add_argument("--cache_dir", type=str,
-                       default=r"D:\signo v6\datasets\keypoints_cache",
+                       default=default_cache_dir,
                        help="Path for keypoint cache files")
     parser.add_argument("--model_path", type=str, default=None,
                        help="Path to save trained model")

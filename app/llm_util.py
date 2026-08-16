@@ -2,8 +2,9 @@ import requests
 import json
 import logging
 import os
+import re
 
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/generate"
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
 VLM_MODEL = os.environ.get("VLM_MODEL", "qwen2-vl:2b")            # Vision Classifier
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen2.5:3b")         # Arbitration Judge
@@ -47,7 +48,7 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
 
     try:
         response = requests.post(
-            OLLAMA_URL,
+            f"{OLLAMA_URL}/api/generate",
             json={
                 "model": model,
                 "prompt": prompt,
@@ -64,9 +65,9 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
             response_text = result.get("response", "").strip()
             
             if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
+                # Strip markdown code fences robustly
+                response_text = re.sub(r'^```(?:json|JSON)?\s*', '', response_text)
+                response_text = re.sub(r'\s*```\s*$', '', response_text)
             response_text = response_text.strip()
             
             data = json.loads(response_text)
@@ -133,7 +134,7 @@ Do NOT include any extra text, markdown, explanations, or backticks.
 """
 
         response = requests.post(
-            OLLAMA_URL,
+            f"{OLLAMA_URL}/api/generate",
             json={
                 "model": model,
                 "prompt": prompt,
@@ -242,7 +243,7 @@ Return ONLY a valid JSON object matching this exact structure:
 """
     try:
         response = requests.post(
-            OLLAMA_URL,
+            f"{OLLAMA_URL}/api/generate",
             json={
                 "model": model,
                 "prompt": prompt,
@@ -257,9 +258,9 @@ Return ONLY a valid JSON object matching this exact structure:
         if response.status_code == 200:
             response_text = response.json().get("response", "").strip()
             if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
+                # Strip markdown code fences robustly
+                response_text = re.sub(r'^```(?:json|JSON)?\s*', '', response_text)
+                response_text = re.sub(r'\s*```\s*$', '', response_text)
             response_text = response_text.strip()
             
             data = json.loads(response_text)
@@ -285,12 +286,11 @@ Return ONLY a valid JSON object matching this exact structure:
 def _preload_gpu_models():
     """Sends empty queries to Ollama to preload VLM and Judge models in the GPU."""
     import time
-    import threading
     time.sleep(2.0)  # Wait for startup to settle down
     for model_name in (VLM_MODEL, JUDGE_MODEL):
         try:
             requests.post(
-                OLLAMA_URL,
+                f"{OLLAMA_URL}/api/generate",
                 json={"model": model_name, "prompt": "", "keep_alive": -1},
                 timeout=5
             )
@@ -298,7 +298,9 @@ def _preload_gpu_models():
             pass
 
 # Start the background thread only during actual server runtime (not during migrate, collectstatic, etc.)
-import threading
-if os.environ.get('RUN_MAIN') == 'true' or os.environ.get('DJANGO_DEBUG', 'True').lower() == 'false':
-    threading.Thread(target=_preload_gpu_models, daemon=True).start()
+import sys
+import threading as _threading
+_is_management_command = len(sys.argv) > 1 and sys.argv[1] in ('migrate', 'collectstatic', 'makemigrations', 'shell', 'test', 'check')
+if not _is_management_command and (os.environ.get('RUN_MAIN') == 'true' or os.environ.get('DJANGO_DEBUG', 'True').lower() == 'false'):
+    _threading.Thread(target=_preload_gpu_models, daemon=True).start()
 
