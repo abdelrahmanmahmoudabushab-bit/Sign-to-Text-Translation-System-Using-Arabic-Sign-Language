@@ -168,12 +168,9 @@ def main():
         if not ret:
             break
 
-        # Flip horizontally for natural mirror effect
-        frame = cv2.flip(frame, 1)
-
         results = None
         if is_active:
-            # Process landmarks
+            # Process landmarks (processed on original, un-mirrored frame)
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = holistic.process(rgb_frame)
 
@@ -228,10 +225,14 @@ def main():
 
             prev_keypoints = keypoints
 
-        # Draw MediaPipe overlays onto OpenCV frame before blitting to Pygame
+        # Draw MediaPipe overlays onto OpenCV frame before flipping
         if is_active and results:
             draw_styled_landmarks(frame, results)
-        else:
+
+        # Flip horizontally for natural mirror effect (done AFTER landmark extraction & drawing to keep coordinates un-mirrored)
+        frame = cv2.flip(frame, 1)
+
+        if not is_active:
             # Draw placeholder when paused
             cv2.rectangle(frame, (80, 200), (560, 280), (15, 23, 42), -1)
             cv2.rectangle(frame, (80, 200), (560, 280), (51, 65, 85), 2)
