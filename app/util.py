@@ -36,6 +36,8 @@ def _get_cache_candidates():
         os.path.normpath(os.path.join(base, "..", "datasets", d))
         for d in ("keypoints_cache", "keypoints_cache_test", "keypoints_cache_test_opt2")
     ]
+    # Add absolute paths for Jetson Orin Nano target environments
+    candidates.append("/home/jetson/signo v6/datasets/keypoints_cache")
     # Jetson Docker fallback: check app/ directory itself for bundled norm stats
     candidates.append(os.path.dirname(os.path.abspath(__file__)))
     return candidates
