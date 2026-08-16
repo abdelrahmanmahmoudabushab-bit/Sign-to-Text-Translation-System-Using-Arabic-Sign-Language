@@ -114,21 +114,17 @@ def main():
     reconstructed_sentence = ""
     reconstructed_english = ""
     
-    still_ticks = 0
-    is_signing = False
-    prev_keypoints = None
-    ema_delta = 0.0
-    debug_tick = 0  # Counter for periodic debug output
-    is_active = True # Tracks if camera processing is active (active by default)
-    print("[STATUS] Kiosk processing ACTIVE BY DEFAULT")
+    is_active = False # Tracks if camera processing is active (starts stopped)
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
-    # Button Rectangles
-    btn_start_stop = pygame.Rect(700, 100, 280, 60)
-    btn_clear = pygame.Rect(700, 190, 280, 60)
-    btn_dialect = pygame.Rect(700, 280, 280, 60)
-    btn_exit = pygame.Rect(700, 370, 280, 60)
+    # Button Rectangles (Manual Control Mode Layout)
+    btn_start_stop = pygame.Rect(700, 80, 280, 50)
+    btn_record_sign = pygame.Rect(700, 140, 280, 50)
+    btn_translate = pygame.Rect(700, 200, 280, 50)
+    btn_clear = pygame.Rect(700, 260, 280, 50)
+    btn_dialect = pygame.Rect(700, 320, 280, 50)
+    btn_exit = pygame.Rect(700, 380, 280, 50)
 
     running = True
 
@@ -151,11 +147,46 @@ def main():
                     if btn_start_stop.collidepoint(mouse_pos):
                         is_active = not is_active
                         frame_buffer = []
-                        prev_keypoints = None
-                        ema_delta = 0.0
-                        is_signing = False
-                        still_ticks = 0
                         print(f"[STATUS] Kiosk processing {'STARTED' if is_active else 'STOPPED'}")
+                    elif btn_record_sign.collidepoint(mouse_pos):
+                        if is_active:
+                            if len(frame_buffer) > 0:
+                                print(f"[ACTION] Capturing sign... buffering {len(frame_buffer)} frames.")
+                                # Pad to N_FRAMES with zeros if shorter
+                                while len(frame_buffer) < N_FRAMES:
+                                    frame_buffer.append(np.zeros(N_KEYPOINTS))
+                                
+                                x_input = np.expand_dims(np.array(frame_buffer), axis=0)
+                                try:
+                                    pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
+                                    print(f"[PREDICT] Result: {repr(pred_word)}")
+                                    if pred_word and pred_word != "?" and pred_word != "-":
+                                        if not collected_words or collected_words[-1] != pred_word:
+                                            collected_words.append(pred_word)
+                                            print(f"Captured: {pred_word}")
+                                except Exception as e:
+                                    print(f"[PREDICT] FAILED: {e}")
+                                    import traceback; traceback.print_exc()
+                                
+                                # Clear frame buffer for next sign
+                                frame_buffer = []
+                            else:
+                                print("[WARNING] Cannot capture sign: frame buffer is empty.")
+                        else:
+                            print("[WARNING] Cannot capture sign: kiosk is stopped.")
+                    elif btn_translate.collidepoint(mouse_pos):
+                        if collected_words:
+                            print(f"[ACTION] Running translation smoothing on: {collected_words}")
+                            try:
+                                smooth_res = smooth_sign_sentence(collected_words, current_dialect)
+                                reconstructed_sentence = smooth_res.get("arabic", "")
+                                reconstructed_english = smooth_res.get("english", "")
+                                print(f"[TRANSLATE] Arabic: {reconstructed_sentence} | English: {reconstructed_english}")
+                            except Exception as e:
+                                print(f"[TRANSLATE] Smoothing failed: {e}")
+                                reconstructed_sentence = " ".join(collected_words)
+                        else:
+                            print("[WARNING] Cannot translate: no words recorded.")
                     elif btn_clear.collidepoint(mouse_pos):
                         collected_words = []
                         reconstructed_sentence = ""
@@ -188,62 +219,7 @@ def main():
             if len(frame_buffer) > N_FRAMES:
                 frame_buffer.pop(0)
 
-            # Motion Check for pause-segmentation (exclude face landmarks [0:33] to eliminate tracking jitter)
-            if prev_keypoints is not None:
-                frame_delta = np.mean(np.abs(keypoints[33:] - prev_keypoints[33:]))
-                # Calculate EMA of delta to filter coordinate jitter (alpha = 0.3)
-                if ema_delta == 0.0:
-                    ema_delta = frame_delta
-                else:
-                    ema_delta = 0.3 * frame_delta + 0.7 * ema_delta
-                
-                # Debug: log motion stats every 30 frames (~1s)
-                debug_tick += 1
-                if debug_tick % 30 == 0:
-                    print(f"[MOTION] ema={ema_delta:.5f} raw={frame_delta:.5f} signing={is_signing} still_ticks={still_ticks} buf={len(frame_buffer)}")
-                    
-                if ema_delta > 0.008:  # Active movement threshold (upper body + hands noise floor is ~0.004-0.005)
-                    if not is_signing:
-                        print(f"[STATE] Signing STARTED (ema={ema_delta:.5f})")
-                    is_signing = True
-                    still_ticks = 0
-                else:
-                    if is_signing:
-                        still_ticks += 1
-                        if still_ticks >= 12: # ~400ms of stable EMA stillness
-                            print(f"Pause detected. Running inference... (buf={len(frame_buffer)})")
-                            while len(frame_buffer) < N_FRAMES:
-                                frame_buffer.append(np.zeros(N_KEYPOINTS))
-                            
-                            x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                            try:
-                                pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
-                                print(f"[PREDICT] Result: {repr(pred_word)}")
-                            except Exception as e:
-                                print(f"[PREDICT] FAILED: {e}")
-                                import traceback; traceback.print_exc()
-                                pred_word = None
 
-                            if pred_word and pred_word != "?" and pred_word != "-":
-                                if not collected_words or collected_words[-1] != pred_word:
-                                    collected_words.append(pred_word)
-                                    print(f"Detected: {pred_word}")
-                                    
-                                    try:
-                                        smooth_res = smooth_sign_sentence(collected_words, current_dialect)
-                                        reconstructed_sentence = smooth_res.get("arabic", "")
-                                        reconstructed_english = smooth_res.get("english", "")
-                                    except Exception:
-                                        reconstructed_sentence = " ".join(collected_words)
-                            
-                            # Reset segmentation state
-                            frame_buffer = []
-                            is_signing = False
-                            still_ticks = 0
-                            ema_delta = 0.0
-                            print("[STATE] Signing ENDED, buffers reset")
-
-            prev_keypoints = keypoints
 
         # Draw MediaPipe overlays onto OpenCV frame before flipping
         if is_active and results:
@@ -273,13 +249,13 @@ def main():
 
         # Status badge overlay on top left of video
         if is_active:
-            status_text = "SIGNING" if is_signing else "WAITING"
-            status_color = (16, 185, 129) if is_signing else (245, 158, 11) # emerald vs amber
+            status_text = f"BUFFERING ({len(frame_buffer)}/60)"
+            status_color = (16, 185, 129) if len(frame_buffer) > 0 else (245, 158, 11)
         else:
             status_text = "INACTIVE"
             status_color = (100, 116, 139) # slate-500 grey
 
-        pygame.draw.rect(screen, (30, 41, 59), (30, 30, 160, 36), border_radius=6)
+        pygame.draw.rect(screen, (30, 41, 59), (30, 30, 200, 36), border_radius=6)
         pygame.draw.circle(screen, status_color, (45, 48), 6)
         lbl_status = font_bold.render(status_text, True, (255, 255, 255))
         screen.blit(lbl_status, (62, 37))
@@ -287,7 +263,7 @@ def main():
         # Draw Control Sidebar Panel
         pygame.draw.rect(screen, (30, 41, 59), (680, 20, 324, 480), border_radius=8)
         lbl_sidebar = font_title.render("Controls", True, (255, 255, 255))
-        screen.blit(lbl_sidebar, (700, 40))
+        screen.blit(lbl_sidebar, (700, 35))
 
         # Render Interactive Buttons with hover transitions
         def draw_button(rect, label, color, hover_color):
@@ -302,6 +278,12 @@ def main():
             draw_button(btn_start_stop, "Stop Kiosk", (220, 38, 38), (185, 28, 28)) # Dark red stops
         else:
             draw_button(btn_start_stop, "Start Kiosk", (16, 185, 129), (5, 150, 105)) # Green starts
+
+        # Capture / Record Sign button (Cyan/Teal theme)
+        draw_button(btn_record_sign, "Capture Sign", (14, 116, 144), (8, 145, 178))
+
+        # Translate Board button (Violet theme)
+        draw_button(btn_translate, "Translate Board", (109, 40, 217), (124, 58, 237))
 
         draw_button(btn_clear, "Clear Session", (51, 65, 85), (71, 85, 105))
         draw_button(btn_dialect, f"Dialect: {current_dialect.split()[0]}", (51, 65, 85), (71, 85, 105))
@@ -325,7 +307,7 @@ def main():
             lbl_english = font_body.render(f"English: {reconstructed_english}", True, (255, 255, 255))
             screen.blit(lbl_english, (40, 680))
         else:
-            lbl_placeholder = font_body.render("Waiting for gestures pause to translate...", True, (71, 85, 105))
+            lbl_placeholder = font_body.render("Click Capture Sign, then Translate Board...", True, (71, 85, 105))
             screen.blit(lbl_placeholder, (40, 620))
 
         # Update Display & tick clock
