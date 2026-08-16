@@ -174,8 +174,9 @@ def _predict_coordinates(
     # 0. Motion / Rest Gating Filter — eliminate false positive hallucinations during static rest
     hand_keypoints = x[0, :, 99:225]
     hand_motion_std = np.std(hand_keypoints)
+    print(f"[INFERENCE] hand_motion_std = {hand_motion_std:.6f}")
     if hand_motion_std < 0.002:
-        logger.info("Rest position detected (hand motion std %.5f < 0.002) — skipping prediction", hand_motion_std)
+        print(f"[INFERENCE] Rest position detected (hand_motion_std < 0.002) — skipping prediction")
         return {
             "pred_lstm": "",
             "lstm_confidence": 1.0,
@@ -249,6 +250,7 @@ def _predict_coordinates(
 
     pred_lstm = candidates[0]
     lstm_confidence = float(top_probabilities[0])
+    print(f"[INFERENCE] Raw LSTM Prediction: {repr(pred_lstm)} (conf: {lstm_confidence:.4f})")
 
     return {
         "pred_lstm": pred_lstm,
