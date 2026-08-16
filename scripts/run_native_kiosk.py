@@ -87,9 +87,9 @@ def main():
     reconstructed_sentence = ""
     reconstructed_english = ""
     
-    last_word_time = time.time()
     still_ticks = 0
     is_signing = False
+    prev_keypoints = None
 
     print("⚡ System ready. Launching display window... Press 'q' to quit.")
 
@@ -114,40 +114,44 @@ def main():
             frame_buffer.pop(0)
 
         # Motion / Stillness Check for auto pause-segmentation
-        # Check standard deviation of coordinates to verify motion
-        coords_std = np.std(keypoints)
-        if coords_std > 0.005:  # User is active
-            is_signing = True
-            still_ticks = 0
-        else:
-            if is_signing:
-                still_ticks += 1
-                if still_ticks >= 25: # ~800ms of stillness
-                    print("Pause detected. Running gesture inference...")
-                    # Build prediction tensor: (1, 60, 225)
-                    while len(frame_buffer) < N_FRAMES:
-                        frame_buffer.append(np.zeros(N_KEYPOINTS))
-                    
-                    x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                    pred_word = predict(x=x_input, dialect=args.dialect)
+        # Compute mean absolute difference of coordinates between consecutive frames
+        if prev_keypoints is not None:
+            delta = np.mean(np.abs(keypoints - prev_keypoints))
+            # If coordinates shift significantly over time, it's active motion
+            if delta > 0.0025:  # Empirical threshold for active hand/body gestures
+                is_signing = True
+                still_ticks = 0
+            else:
+                if is_signing:
+                    still_ticks += 1
+                    if still_ticks >= 25: # ~800ms of consecutive stillness
+                        print("Pause detected. Running gesture inference...")
+                        # Build prediction tensor: (1, 60, 225)
+                        while len(frame_buffer) < N_FRAMES:
+                            frame_buffer.append(np.zeros(N_KEYPOINTS))
+                        
+                        x_input = np.expand_dims(np.array(frame_buffer), axis=0)
+                        pred_word = predict(x=x_input, dialect=args.dialect)
 
-                    if pred_word and pred_word != "?" and pred_word != "-":
-                        if not collected_words or collected_words[-1] != pred_word:
-                            collected_words.append(pred_word)
-                            print(f" Detected Word: {pred_word}")
-                            
-                            # Trigger sentence smoothing reconstructor in background
-                            try:
-                                smooth_res = smooth_sign_sentence(collected_words, args.dialect)
-                                reconstructed_sentence = smooth_res.get("arabic", "")
-                                reconstructed_english = smooth_res.get("english", "")
-                            except Exception:
-                                reconstructed_sentence = " ".join(collected_words)
-                    
-                    # Reset segmentation state
-                    frame_buffer = []
-                    is_signing = False
-                    still_ticks = 0
+                        if pred_word and pred_word != "?" and pred_word != "-":
+                            if not collected_words or collected_words[-1] != pred_word:
+                                collected_words.append(pred_word)
+                                print(f" Detected Word: {pred_word}")
+                                
+                                # Trigger sentence smoothing reconstructor in background
+                                try:
+                                    smooth_res = smooth_sign_sentence(collected_words, args.dialect)
+                                    reconstructed_sentence = smooth_res.get("arabic", "")
+                                    reconstructed_english = smooth_res.get("english", "")
+                                except Exception:
+                                    reconstructed_sentence = " ".join(collected_words)
+                        
+                        # Reset segmentation state
+                        frame_buffer = []
+                        is_signing = False
+                        still_ticks = 0
+
+        prev_keypoints = keypoints
 
         # Draw overlays
         draw_styled_landmarks(frame, results)
