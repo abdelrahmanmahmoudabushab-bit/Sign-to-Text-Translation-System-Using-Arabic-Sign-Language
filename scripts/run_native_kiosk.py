@@ -113,6 +113,7 @@ def main():
     still_ticks = 0
     is_signing = False
     prev_keypoints = None
+    ema_delta = 0.0
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
@@ -182,18 +183,24 @@ def main():
 
         # Motion Check for pause-segmentation
         if prev_keypoints is not None:
-            delta = np.mean(np.abs(keypoints - prev_keypoints))
+            frame_delta = np.mean(np.abs(keypoints - prev_keypoints))
+            # Calculate EMA of delta to filter coordinate jitter (alpha = 0.2)
+            if ema_delta == 0.0:
+                ema_delta = frame_delta
+            else:
+                ema_delta = 0.2 * frame_delta + 0.8 * ema_delta
+
             # Print diagnostic motion delta to terminal
-            if delta > 0.0005:
-                print(f"DEBUG - Delta: {delta:.6f} | Still Ticks: {still_ticks} | Signing: {is_signing}")
+            if ema_delta > 0.0005:
+                print(f"DEBUG - Frame Delta: {frame_delta:.6f} | EMA: {ema_delta:.6f} | Still Ticks: {still_ticks} | Signing: {is_signing}")
                 
-            if delta > 0.0035:  # Active movement threshold
+            if ema_delta > 0.0035:  # Active movement threshold (tested with smoothed EMA)
                 is_signing = True
                 still_ticks = 0
             else:
                 if is_signing:
                     still_ticks += 1
-                    if still_ticks >= 20: # ~660ms of consecutive stillness
+                    if still_ticks >= 15: # ~500ms of stable EMA stillness (reduced for faster response)
                         print("Pause detected. Running inference...")
                         while len(frame_buffer) < N_FRAMES:
                             frame_buffer.append(np.zeros(N_KEYPOINTS))
@@ -217,6 +224,7 @@ def main():
                         frame_buffer = []
                         is_signing = False
                         still_ticks = 0
+                        ema_delta = 0.0
 
         prev_keypoints = keypoints
 
