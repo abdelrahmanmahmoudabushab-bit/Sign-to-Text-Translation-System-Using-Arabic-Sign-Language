@@ -187,13 +187,13 @@ def main():
             if delta > 0.0005:
                 print(f"DEBUG - Delta: {delta:.6f} | Still Ticks: {still_ticks} | Signing: {is_signing}")
                 
-            if delta > 0.0025:  # Active movement threshold
+            if delta > 0.0035:  # Active movement threshold
                 is_signing = True
                 still_ticks = 0
             else:
                 if is_signing:
                     still_ticks += 1
-                    if still_ticks >= 25: # ~800ms of stillness
+                    if still_ticks >= 20: # ~660ms of consecutive stillness
                         print("Pause detected. Running inference...")
                         while len(frame_buffer) < N_FRAMES:
                             frame_buffer.append(np.zeros(N_KEYPOINTS))
