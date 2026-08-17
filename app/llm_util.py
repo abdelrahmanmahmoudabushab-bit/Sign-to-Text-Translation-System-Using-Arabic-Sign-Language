@@ -3,6 +3,9 @@ import json
 import logging
 import os
 import re
+import hashlib
+import tempfile
+import threading
 
 # Detect if running on NVIDIA Jetson target
 is_jetson = os.path.exists("/etc/nv_tegra_release")
@@ -15,14 +18,91 @@ TRANSLATOR_MODEL = os.environ.get("TRANSLATOR_MODEL", "llama3.2:3b") # Grammar R
 
 logger = logging.getLogger(__name__)
 
-def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model=TRANSLATOR_MODEL):
+# ─── 20x SWE Cache & Async Management ─────────────────────────────────────────
+_TRANSLATION_CACHE = {}
+_CACHE_LOCK = threading.Lock()
+_cache_loaded = False
+
+def _init_cache():
+    global _TRANSLATION_CACHE, _cache_loaded
+    if _cache_loaded:
+        return
+    with _CACHE_LOCK:
+        if _cache_loaded:
+            return
+        cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "translation_cache.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    _TRANSLATION_CACHE.update(json.load(f))
+                logger.info("⚡ Loaded %d translations from persistent cache", len(_TRANSLATION_CACHE))
+            except Exception as e:
+                logger.warning("Failed to load translation cache: %s", e)
+        _cache_loaded = True
+
+def _save_cache():
+    cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "translation_cache.json")
+    try:
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with _CACHE_LOCK:
+            cache_snapshot = dict(_TRANSLATION_CACHE)
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(cache_file), suffix='.tmp')
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(cache_snapshot, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, cache_file)
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
+    except Exception as e:
+        logger.warning("Failed to save translation cache: %s", e)
+
+def rule_based_fallback(words_list, dialect):
+    """Zero-LLM fallback: maps top candidates to a basic grammatical structure."""
+    if isinstance(words_list[0], list):
+        words = [opts[0] for opts in words_list]
+    else:
+        words = words_list
+    # Remove annotations like (negation) for readable output
+    clean_words = [re.sub(r'\s*\([^)]*\)', '', w) for w in words]
+    arabic = " ".join(clean_words)
+    english = f"[Offline Fallback] {' '.join(words)}"
+    return {
+        "arabic": arabic,
+        "english": english
+    }
+
+def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model=TRANSLATOR_MODEL, conversation_history=None, average_confidence=1.0):
     """
-    Takes a list of raw sign language words, queries the local Ollama LLM, 
+    Takes a list of raw sign language words/candidates, queries the local Ollama LLM, 
     and returns a grammatically correct sentence in the selected dialect and its English translation.
+    Features: Semantic Caching, Stateful Conversation History, Dynamic Temp, and Rule-Based Fallback.
     """
     if not words_list:
         return {"arabic": "", "english": ""}
         
+    _init_cache()
+    
+    # 1. Check Cache
+    # Build unique hash key from candidate sequence, dialect, and conversation history
+    history_serialized = json.dumps(conversation_history or [], sort_keys=True)
+    words_serialized = json.dumps(words_list, sort_keys=True)
+    cache_key = hashlib.sha256(f"{words_serialized}_{dialect}_{history_serialized}".encode("utf-8")).hexdigest()
+    
+    with _CACHE_LOCK:
+        cached_res = _TRANSLATION_CACHE.get(cache_key)
+    if cached_res:
+        logger.info("⚡ Translation Cache HIT: %s", cached_res["arabic"])
+        return cached_res
+
+    # 2. Dynamic Temperature Control
+    # Use strict temperature if confidence is high, allow more linguistic flexibility if low
+    temp = 0.0 if average_confidence >= 0.8 else 0.3
+
+    # 3. Format Prompt
     is_options_format = isinstance(words_list[0], list)
     
     if is_options_format:
@@ -40,7 +120,31 @@ Input Sign Candidate Sequences:
 {keywords_str}
 
 Target Dialect: {dialect}
+"""
+    else:
+        keywords_str = " -> ".join(words_list)
+        prompt = f"""
+[SYSTEM ROLE: Master Arabic Sign Language Translator & Computational Linguist]
+Your task is to convert a sequence of disjointed Arabic Sign Language (ArSL) sign glosses into a natural, grammatically correct spoken sentence in the targeted dialect: {dialect}.
 
+Input Sign Sequence: [{keywords_str}]
+Target Dialect: {dialect}
+"""
+
+    # Stateful Conversation History Injection
+    if conversation_history:
+        history_str = "\n".join([
+            f"Prior Arabic sentence: {item.get('arabic')}"
+            for item in conversation_history[-3:] # Pass last 3 sentences for local context window
+        ])
+        prompt += f"""
+[CONVERSATION CONTEXT]
+The signer has already established the following sentences in the current session:
+{history_str}
+Use this context to resolve pronouns (he, she, it) and preserve correct timeline/tenses.
+"""
+
+    prompt += f"""
 [TRANSLATION GUIDELINES]
 1. Choose the combination of words that forms the most contextually and grammatically correct spoken sentence in {dialect}.
 2. Do not choose options that produce nonsense or illogical phrases (e.g. choice combinations that make no semantic sense).
@@ -54,32 +158,8 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
   "english": "Fluent English translation"
 }}
 """
-    else:
-        keywords_str = " -> ".join(words_list)
-        prompt = f"""
-[SYSTEM ROLE: Master Arabic Sign Language Translator & Computational Linguist]
-Your task is to convert a sequence of disjointed Arabic Sign Language (ArSL) sign glosses into a natural, grammatically correct spoken sentence in the targeted dialect: {dialect}.
 
-Input Sign Sequence: [{keywords_str}]
-Target Dialect: {dialect}
-
-[TRANSLATION GUIDELINES]
-1. Reconstruct the raw keywords into a fluent, natural, and polite spoken sentence matching the grammatical syntax of {dialect}.
-2. If any sign gloss contains a grammatical annotation such as "(negation)", "(question)", or "(emphasis)" (e.g. "ذهب (negation)" or "مدرسة (question)"), apply that grammatical rule to the sentence reconstruction:
-   - "(negation)" means the action or concept is negated (e.g., "لم يذهب" or "ليس مدرسة").
-   - "(question)" means the sentence should be phrased as a question (e.g., "هل ذهب؟" or "هل هذه مدرسة؟").
-   - "(emphasis)" means the action/adjective is intensified (e.g., "ذهب بسرعة" or "مدرسة ممتازة جداً").
-3. Provide an accurate, idiomatic English translation of the reconstructed sentence.
-4. Do not add fictitious details not implied by the sign sequence.
-
-[OUTPUT SPECIFICATION]
-Return ONLY a valid JSON object matching this schema (no markdown, no backticks, no extra commentary):
-{{
-  "arabic": "Reconstructed fluent sentence in {dialect}",
-  "english": "Fluent English translation"
-}}
-"""
-
+    # 4. Execute LLM Query
     try:
         response = requests.post(
             f"{OLLAMA_URL}/api/generate",
@@ -88,10 +168,10 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.2
+                    "temperature": temp
                 }
             },
-            timeout=90
+            timeout=10 # Short timeout for responsive UI fallback
         )
         
         if response.status_code == 200:
@@ -99,25 +179,27 @@ Return ONLY a valid JSON object matching this schema (no markdown, no backticks,
             response_text = result.get("response", "").strip()
             
             if response_text.startswith("```"):
-                # Strip markdown code fences robustly
                 response_text = re.sub(r'^```(?:json|JSON)?\s*', '', response_text)
                 response_text = re.sub(r'\s*```\s*$', '', response_text)
             response_text = response_text.strip()
             
             data = json.loads(response_text)
-            return {
+            smoothed_res = {
                 "arabic": data.get("arabic", "").strip(),
                 "english": data.get("english", "").strip()
             }
             
+            # Save to persistent cache
+            with _CACHE_LOCK:
+                _TRANSLATION_CACHE[cache_key] = smoothed_res
+            _save_cache()
+            return smoothed_res
+            
     except Exception as e:
-        logger.warning("Ollama integration warning: %s", e)
+        logger.warning("Ollama integration failed. Falling back to rule-based generation: %s", e)
         
-    fallback_arabic = " ".join(words_list)
-    return {
-        "arabic": fallback_arabic,
-        "english": f"Ollama offline. Start Ollama and run 'ollama run {model}' to enable translations."
-    }
+    # 5. Rule-Based Fallback
+    return rule_based_fallback(words_list, dialect)
 
 
 def query_vlm_with_frames(base64_frames: list, candidates: list, dialect: str = "Saudi Arabic Sign Language", model: str = VLM_MODEL) -> tuple:

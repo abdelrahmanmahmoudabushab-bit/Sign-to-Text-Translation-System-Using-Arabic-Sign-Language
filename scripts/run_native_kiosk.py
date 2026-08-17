@@ -143,6 +143,8 @@ def main():
     countdown_start_time = 0.0
     recording_start_time = 0.0
     is_left_handed = False # Swaps hands for left-handed signers
+    is_translating = False # Tracks async translation background thread state
+    translation_history = [] # Stores past translation context for LLM memory
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
@@ -192,15 +194,46 @@ def main():
                             print("[WARNING] Cannot start recording: kiosk is stopped.")
                     elif btn_translate.collidepoint(mouse_pos):
                         if collected_words:
-                            print(f"[ACTION] Running translation smoothing on: {collected_words}")
-                            try:
-                                smooth_res = smooth_sign_sentence(collected_words, current_dialect)
-                                reconstructed_sentence = smooth_res.get("arabic", "")
-                                reconstructed_english = smooth_res.get("english", "")
-                                print(f"[TRANSLATE] Arabic: {reconstructed_sentence} | English: {reconstructed_english}")
-                            except Exception as e:
-                                print(f"[TRANSLATE] Smoothing failed: {e}")
-                                reconstructed_sentence = " ".join([c[0] for c in collected_words])
+                            if not is_translating:
+                                is_translating = True
+                                print(f"[ACTION] Launching asynchronous translation thread on: {collected_words}")
+                                
+                                def run_translation_thread(words, dialect, history):
+                                    nonlocal reconstructed_sentence, reconstructed_english, is_translating, translation_history
+                                    try:
+                                        # Use 20x SWE features: history, dynamic temperature
+                                        res = smooth_sign_sentence(
+                                            words_list=words,
+                                            dialect=dialect,
+                                            conversation_history=history,
+                                            average_confidence=0.85
+                                        )
+                                        reconstructed_sentence = res.get("arabic", "")
+                                        reconstructed_english = res.get("english", "")
+                                        print(f"[TRANSLATE Thread] Completed. Arabic: {reconstructed_sentence}")
+                                        
+                                        if reconstructed_sentence:
+                                            # Save to session history memory context
+                                            translation_history.append({
+                                                "arabic": reconstructed_sentence,
+                                                "english": reconstructed_english
+                                            })
+                                    except Exception as thread_err:
+                                        print(f"[TRANSLATE Thread] Failed: {thread_err}")
+                                        reconstructed_sentence = " ".join([c[0] for c in words])
+                                        reconstructed_english = "[Translation Error]"
+                                    finally:
+                                        is_translating = False
+
+                                import threading
+                                t = threading.Thread(
+                                    target=run_translation_thread, 
+                                    args=(collected_words.copy(), current_dialect, translation_history.copy()), 
+                                    daemon=True
+                                )
+                                t.start()
+                            else:
+                                print("[WARNING] Translation already in progress.")
                         else:
                             print("[WARNING] Cannot translate: no words recorded.")
                     elif btn_clear.collidepoint(mouse_pos):
@@ -398,7 +431,10 @@ def main():
         screen.blit(lbl_gloss, (40, 580))
 
         # Render Reconstructed Arabic Sentence
-        if reconstructed_sentence:
+        if is_translating:
+            lbl_translating = font_bold.render("Smoothing sentence via Ollama GPU...", True, (59, 130, 246))
+            screen.blit(lbl_translating, (40, 620))
+        elif reconstructed_sentence:
             lbl_sentence = render_arabic(reconstructed_sentence, font_large_arabic, (16, 185, 129))
             screen.blit(lbl_sentence, (40, 620))
 
