@@ -62,6 +62,29 @@ def draw_styled_landmarks(image, results):
         )
 
 
+def resample_sequence(frames, target_len=60):
+    """Linearly interpolates a list of frame keypoints to exactly target_len frames."""
+    src_len = len(frames)
+    if src_len == 0:
+        return [np.zeros(225) for _ in range(target_len)]
+    if src_len == target_len:
+        return frames
+    
+    new_frames = []
+    for i in range(target_len):
+        idx = i * (src_len - 1) / (target_len - 1)
+        idx_low = int(np.floor(idx))
+        idx_high = int(np.ceil(idx))
+        weight = idx - idx_low
+        
+        val_low = np.array(frames[idx_low])
+        val_high = np.array(frames[idx_high])
+        
+        interpolated = (1 - weight) * val_low + weight * val_high
+        new_frames.append(interpolated)
+    return new_frames
+
+
 def main():
     parser = argparse.ArgumentParser(description="Signo Native Desktop Kiosk")
     parser.add_argument("--camera", type=int, default=0, help="Webcam device index")
@@ -117,6 +140,7 @@ def main():
     is_active = False # Tracks if camera processing is active (starts stopped)
     record_state = "IDLE" # "IDLE", "COUNTDOWN", "RECORDING"
     countdown_start_time = 0.0
+    recording_start_time = 0.0
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
@@ -207,17 +231,22 @@ def main():
                 remaining = 3.0 - elapsed
                 if remaining <= 0:
                     record_state = "RECORDING"
+                    recording_start_time = time.time()
                     frame_buffer = []
                     print("[ACTION] Recording started...")
             
             elif record_state == "RECORDING":
+                import time
                 # Extract normalized coordinates
                 keypoints = DataLoader.extract_keypoints(results)
                 frame_buffer.append(keypoints)
 
-                if len(frame_buffer) >= N_FRAMES:
-                    print(f"[ACTION] Recording complete. Running prediction...")
-                    x_input = np.expand_dims(np.array(frame_buffer), axis=0)
+                elapsed_rec = time.time() - recording_start_time
+                if elapsed_rec >= 2.0:
+                    print(f"[ACTION] Recording complete. Captured {len(frame_buffer)} frames in {elapsed_rec:.2f}s. Resampling...")
+                    # Resample captured frames linearly to exactly N_FRAMES (60)
+                    resampled_buffer = resample_sequence(frame_buffer, N_FRAMES)
+                    x_input = np.expand_dims(np.array(resampled_buffer), axis=0)
                     try:
                         pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
                         print(f"[PREDICT] Result: {repr(pred_word)}")
@@ -250,7 +279,10 @@ def main():
                     countdown_val = int(np.ceil(remaining))
                     cv2.putText(frame, f"STARTING IN: {countdown_val}", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (59, 130, 246), 4, cv2.LINE_AA)
             elif record_state == "RECORDING":
-                cv2.putText(frame, f"RECORDING ({len(frame_buffer)}/{N_FRAMES})", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2, cv2.LINE_AA)
+                import time
+                elapsed_rec = time.time() - recording_start_time
+                progress_pct = int(min(100, (elapsed_rec / 2.0) * 100))
+                cv2.putText(frame, f"RECORDING ({progress_pct}%)", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2, cv2.LINE_AA)
                 cv2.circle(frame, (100, 50), 12, (239, 68, 68), -1)
 
         if not is_active:
@@ -281,7 +313,10 @@ def main():
                 status_text = "GET READY"
                 status_color = (59, 130, 246) # Blue
             elif record_state == "RECORDING":
-                status_text = f"RECORDING ({len(frame_buffer)}/60)"
+                import time
+                elapsed_rec = time.time() - recording_start_time
+                progress_pct = int(min(100, (elapsed_rec / 2.0) * 100))
+                status_text = f"RECORDING ({progress_pct}%)"
                 status_color = (239, 68, 68) # Red
         else:
             status_text = "INACTIVE"
