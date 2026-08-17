@@ -209,19 +209,11 @@ def main():
                     record_state = "RECORDING"
                     frame_buffer = []
                     print("[ACTION] Recording started...")
-                else:
-                    # Draw countdown text on frame
-                    countdown_val = int(np.ceil(remaining))
-                    cv2.putText(frame, f"STARTING IN: {countdown_val}", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (59, 130, 246), 4, cv2.LINE_AA)
             
             elif record_state == "RECORDING":
                 # Extract normalized coordinates
                 keypoints = DataLoader.extract_keypoints(results)
                 frame_buffer.append(keypoints)
-
-                # Draw recording indicator on frame
-                cv2.putText(frame, f"RECORDING ({len(frame_buffer)}/{N_FRAMES})", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2, cv2.LINE_AA)
-                cv2.circle(frame, (100, 50), 12, (239, 68, 68), -1)
 
                 if len(frame_buffer) >= N_FRAMES:
                     print(f"[ACTION] Recording complete. Running prediction...")
@@ -247,6 +239,19 @@ def main():
 
         # Flip horizontally for natural mirror effect (done AFTER landmark extraction & drawing to keep coordinates un-mirrored)
         frame = cv2.flip(frame, 1)
+
+        # Draw text overlays on the flipped frame so they are not mirrored
+        if is_active:
+            if record_state == "COUNTDOWN":
+                import time
+                elapsed = time.time() - countdown_start_time
+                remaining = 3.0 - elapsed
+                if remaining > 0:
+                    countdown_val = int(np.ceil(remaining))
+                    cv2.putText(frame, f"STARTING IN: {countdown_val}", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (59, 130, 246), 4, cv2.LINE_AA)
+            elif record_state == "RECORDING":
+                cv2.putText(frame, f"RECORDING ({len(frame_buffer)}/{N_FRAMES})", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2, cv2.LINE_AA)
+                cv2.circle(frame, (100, 50), 12, (239, 68, 68), -1)
 
         if not is_active:
             # Draw placeholder when paused
