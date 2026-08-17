@@ -292,19 +292,26 @@ def main():
 
         # Draw text overlays on the flipped frame so they are not mirrored
         if is_active:
+            # Draw Torso Alignment Guide overlay in IDLE or COUNTDOWN states to assist user positioning
+            if record_state in ("IDLE", "COUNTDOWN"):
+                cv2.ellipse(frame, (320, 150), (60, 80), 0, 0, 360, (184, 163, 148), 2, cv2.LINE_AA) # Face Oval (BGR)
+                cv2.line(frame, (250, 270), (140, 380), (184, 163, 148), 2, cv2.LINE_AA) # Left Shoulder
+                cv2.line(frame, (390, 270), (500, 380), (184, 163, 148), 2, cv2.LINE_AA) # Right Shoulder
+                cv2.putText(frame, "ALIGN HEAD & SHOULDERS", (170, 420), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (184, 163, 148), 1, cv2.LINE_AA)
+
             if record_state == "COUNTDOWN":
                 import time
                 elapsed = time.time() - countdown_start_time
                 remaining = 3.0 - elapsed
                 if remaining > 0:
                     countdown_val = int(np.ceil(remaining))
-                    cv2.putText(frame, f"STARTING IN: {countdown_val}", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (59, 130, 246), 4, cv2.LINE_AA)
+                    cv2.putText(frame, f"STARTING IN: {countdown_val}", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (246, 130, 59), 4, cv2.LINE_AA) # Cyan-blue (BGR)
             elif record_state == "RECORDING":
                 import time
                 elapsed_rec = time.time() - recording_start_time
                 progress_pct = int(min(100, (elapsed_rec / 2.0) * 100))
-                cv2.putText(frame, f"RECORDING ({progress_pct}%)", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2, cv2.LINE_AA)
-                cv2.circle(frame, (100, 50), 12, (239, 68, 68), -1)
+                cv2.putText(frame, f"RECORDING ({progress_pct}%)", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (68, 68, 239), 2, cv2.LINE_AA) # Red (BGR)
+                cv2.circle(frame, (100, 50), 12, (68, 68, 239), -1)
 
         if not is_active:
             # Draw placeholder when paused
