@@ -102,6 +102,11 @@ def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model
     # Use strict temperature if confidence is high, allow more linguistic flexibility if low
     temp = 0.0 if average_confidence >= 0.8 else 0.3
 
+    # Dialect-specific tips for Levantine/Jordanian Arabic
+    dialect_guidelines = ""
+    if "Levantine" in dialect:
+        dialect_guidelines = "\n5. Target Dialect Specifics: For Levantine/Jordanian Arabic, favor colloquial regional verb conjugation and terms (e.g. use 'بدي' instead of 'أريد', 'هون' instead of 'هنا', 'شلونك' or 'كيفك' instead of 'كيف حالك', 'هلق' or 'هسا' instead of 'الآن') to make the output sound natural and friendly to local speakers."
+
     # 3. Format Prompt
     is_options_format = isinstance(words_list[0], list)
     
@@ -149,7 +154,7 @@ Use this context to resolve pronouns (he, she, it) and preserve correct timeline
 1. Choose the combination of words that forms the most contextually and grammatically correct spoken sentence in {dialect}.
 2. Do not choose options that produce nonsense or illogical phrases (e.g. choice combinations that make no semantic sense).
 3. Reconstruct the selected keywords into a fluent, natural, and polite spoken sentence matching the grammatical syntax of {dialect}.
-4. Provide an accurate, idiomatic English translation of the reconstructed sentence.
+4. Provide an accurate, idiomatic English translation of the reconstructed sentence.{dialect_guidelines}
 
 [OUTPUT SPECIFICATION]
 Return ONLY a valid JSON object matching this schema (no markdown, no backticks, no extra commentary):

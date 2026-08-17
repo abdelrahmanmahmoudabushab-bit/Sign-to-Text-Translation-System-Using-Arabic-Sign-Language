@@ -145,7 +145,8 @@ def main():
     is_left_handed = False # Swaps hands for left-handed signers
     is_translating = False # Tracks async translation background thread state
     translation_history = [] # Stores past translation context for LLM memory
-    dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
+    motion_history = [] # Tracks real-time kinetic activity during recording for wave render
+    dialects = ["Levantine Sign Language", "Saudi Arabic Sign Language", "Gulf Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
     # Button Rectangles (Manual Control Mode Layout)
@@ -279,6 +280,11 @@ def main():
                 # Extract normalized coordinates
                 keypoints = DataLoader.extract_keypoints(results)
                 frame_buffer.append(keypoints)
+                # Track kinetic deviation of hands for reactive wave overlay
+                hands_motion = np.std(keypoints[99:]) if len(keypoints) > 99 else 0.0
+                motion_history.append(hands_motion)
+                if len(motion_history) > 60:
+                    motion_history.pop(0)
 
                 elapsed_rec = time.time() - recording_start_time
                 if elapsed_rec >= 2.0:
