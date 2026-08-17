@@ -118,6 +118,7 @@ def main():
 
     # 2. Camera Setup
     cap = cv2.VideoCapture(args.camera)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
     if not cap.isOpened():
         print(f"❌ Error: Could not open camera source index {args.camera}")
         return
