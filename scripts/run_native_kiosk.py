@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["SIGNO_BYPASS_ARBITRATION"] = "1"
 
 from app.DataLoader import DataLoader, N_FRAMES, N_KEYPOINTS
-from app.util import predict
+from app.util import predict_candidates
 from app.llm_util import smooth_sign_sentence
 
 
@@ -142,6 +142,7 @@ def main():
     record_state = "IDLE" # "IDLE", "COUNTDOWN", "RECORDING"
     countdown_start_time = 0.0
     recording_start_time = 0.0
+    is_left_handed = False # Swaps hands for left-handed signers
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
@@ -150,8 +151,9 @@ def main():
     btn_record_sign = pygame.Rect(700, 140, 280, 50)
     btn_translate = pygame.Rect(700, 200, 280, 50)
     btn_clear = pygame.Rect(700, 260, 280, 50)
-    btn_dialect = pygame.Rect(700, 320, 280, 50)
-    btn_exit = pygame.Rect(700, 380, 280, 50)
+    btn_handedness = pygame.Rect(700, 320, 280, 50)
+    btn_dialect = pygame.Rect(700, 380, 280, 50)
+    btn_exit = pygame.Rect(700, 440, 280, 50)
 
     running = True
 
@@ -198,7 +200,7 @@ def main():
                                 print(f"[TRANSLATE] Arabic: {reconstructed_sentence} | English: {reconstructed_english}")
                             except Exception as e:
                                 print(f"[TRANSLATE] Smoothing failed: {e}")
-                                reconstructed_sentence = " ".join(collected_words)
+                                reconstructed_sentence = " ".join([c[0] for c in collected_words])
                         else:
                             print("[WARNING] Cannot translate: no words recorded.")
                     elif btn_clear.collidepoint(mouse_pos):
@@ -208,6 +210,9 @@ def main():
                         frame_buffer = []
                         record_state = "IDLE"
                         print("[ACTION] Session cleared.")
+                    elif btn_handedness.collidepoint(mouse_pos):
+                        is_left_handed = not is_left_handed
+                        print(f"[ACTION] Dominant Hand swapped. Left-Handed Mode: {is_left_handed}")
                     elif btn_dialect.collidepoint(mouse_pos):
                         idx = (dialects.index(current_dialect) + 1) % len(dialects)
                         current_dialect = dialects[idx]
@@ -247,14 +252,29 @@ def main():
                     print(f"[ACTION] Recording complete. Captured {len(frame_buffer)} frames in {elapsed_rec:.2f}s. Resampling...")
                     # Resample captured frames linearly to exactly N_FRAMES (60)
                     resampled_buffer = resample_sequence(frame_buffer, N_FRAMES)
+                    
+                    # If left-handed mode is enabled, swap left & right hand channels and mirror X axis
+                    if is_left_handed:
+                        mirrored_buffer = []
+                        for kps in resampled_buffer:
+                            kp_reshaped = kps.reshape(-1, 3)
+                            kp_reshaped[:, 0] = -kp_reshaped[:, 0] # Mirror horizontal coordinates
+                            pose_part = kp_reshaped[:33]
+                            lh_part = kp_reshaped[33:54]
+                            rh_part = kp_reshaped[54:75]
+                            kp_swapped = np.concatenate((pose_part, rh_part, lh_part))
+                            mirrored_buffer.append(kp_swapped.flatten())
+                        resampled_buffer = mirrored_buffer
+                        print("[ACTION] Left-Handed coordinates mirrored and swapped successfully.")
+
                     x_input = np.expand_dims(np.array(resampled_buffer), axis=0)
                     try:
-                        pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
-                        print(f"[PREDICT] Result: {repr(pred_word)}")
-                        if pred_word and pred_word != "?" and pred_word != "-":
-                            if not collected_words or collected_words[-1] != pred_word:
-                                collected_words.append(pred_word)
-                                print(f"Captured: {pred_word}")
+                        pred_candidates = predict_candidates(x=x_input, dialect=current_dialect)
+                        print(f"[PREDICT] Candidates: {pred_candidates}")
+                        if pred_candidates and pred_candidates[0] != "?" and pred_candidates[0] != "-":
+                            if not collected_words or collected_words[-1][0] != pred_candidates[0]:
+                                collected_words.append(pred_candidates)
+                                print(f"Captured: {pred_candidates}")
                     except Exception as e:
                         print(f"[PREDICT] FAILED: {e}")
                         import traceback; traceback.print_exc()
@@ -354,6 +374,9 @@ def main():
         draw_button(btn_translate, "Translate Board", (109, 40, 217), (124, 58, 237))
 
         draw_button(btn_clear, "Clear Session", (51, 65, 85), (71, 85, 105))
+        # Handedness button
+        hand_label = "Hand: Left-Handed" if is_left_handed else "Hand: Right-Handed"
+        draw_button(btn_handedness, hand_label, (51, 65, 85), (71, 85, 105))
         draw_button(btn_dialect, f"Dialect: {current_dialect.split()[0]}", (51, 65, 85), (71, 85, 105))
         draw_button(btn_exit, "Exit App", (71, 85, 105), (100, 116, 139))
 
@@ -362,8 +385,8 @@ def main():
         lbl_dashboard = font_title.render("Live Translation Board", True, (255, 255, 255))
         screen.blit(lbl_dashboard, (40, 540))
 
-        # Render glosses sequence
-        gloss_str = " -> ".join(collected_words) if collected_words else "No signs recorded yet..."
+        # Render glosses sequence using the top prediction for each position
+        gloss_str = " -> ".join([c[0] for c in collected_words]) if collected_words else "No signs recorded yet..."
         lbl_gloss = font_body.render(f"Glosses: {gloss_str}", True, (148, 163, 184))
         screen.blit(lbl_gloss, (40, 580))
 

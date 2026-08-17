@@ -23,9 +23,40 @@ def smooth_sign_sentence(words_list, dialect="Saudi Arabic Sign Language", model
     if not words_list:
         return {"arabic": "", "english": ""}
         
-    keywords_str = " -> ".join(words_list)
+    is_options_format = isinstance(words_list[0], list)
     
-    prompt = f"""
+    if is_options_format:
+        options_lines = []
+        for idx, opts in enumerate(words_list):
+            options_lines.append(f"Position {idx + 1} Options: [{', '.join(opts)}]")
+        keywords_str = "\n".join(options_lines)
+        
+        prompt = f"""
+[SYSTEM ROLE: Master Arabic Sign Language Translator & Computational Linguist]
+Your task is to review a sequence of positions, where each position contains candidate signs (ordered by model likelihood). 
+Choose exactly one word from each position list to construct the most logical, natural, and grammatically correct spoken sentence in the targeted dialect: {dialect}.
+
+Input Sign Candidate Sequences:
+{keywords_str}
+
+Target Dialect: {dialect}
+
+[TRANSLATION GUIDELINES]
+1. Choose the combination of words that forms the most contextually and grammatically correct spoken sentence in {dialect}.
+2. Do not choose options that produce nonsense or illogical phrases (e.g. choice combinations that make no semantic sense).
+3. Reconstruct the selected keywords into a fluent, natural, and polite spoken sentence matching the grammatical syntax of {dialect}.
+4. Provide an accurate, idiomatic English translation of the reconstructed sentence.
+
+[OUTPUT SPECIFICATION]
+Return ONLY a valid JSON object matching this schema (no markdown, no backticks, no extra commentary):
+{{
+  "arabic": "Reconstructed fluent sentence in {dialect}",
+  "english": "Fluent English translation"
+}}
+"""
+    else:
+        keywords_str = " -> ".join(words_list)
+        prompt = f"""
 [SYSTEM ROLE: Master Arabic Sign Language Translator & Computational Linguist]
 Your task is to convert a sequence of disjointed Arabic Sign Language (ArSL) sign glosses into a natural, grammatically correct spoken sentence in the targeted dialect: {dialect}.
 

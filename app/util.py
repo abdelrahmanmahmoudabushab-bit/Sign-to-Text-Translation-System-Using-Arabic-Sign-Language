@@ -492,6 +492,17 @@ def predict(x: np.ndarray = None, video_path: str = None, history: list = None, 
     )
 
 
+def predict_candidates(x: np.ndarray, dialect: str = 'Saudi Arabic Sign Language') -> list:
+    """Predicts Arabic Sign Language gesture and returns top 3 candidate labels."""
+    _init()
+    if _model is None:
+        return ["?"]
+    res = _predict_coordinates(x, None, dialect, time.time())
+    if res.get("is_rest", False):
+        return ["-"]
+    return res.get("candidates", ["?"])[:3]
+
+
 def main():
     """Quick test: run inference on a local video file."""
     from app import DataLoader as DL
