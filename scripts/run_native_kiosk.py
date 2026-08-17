@@ -115,6 +115,8 @@ def main():
     reconstructed_english = ""
     
     is_active = False # Tracks if camera processing is active (starts stopped)
+    record_state = "IDLE" # "IDLE", "COUNTDOWN", "RECORDING"
+    countdown_start_time = 0.0
     dialects = ["Saudi Arabic Sign Language", "Gulf Sign Language", "Levantine Sign Language", "Egyptian Sign Language"]
     current_dialect = args.dialect if args.dialect in dialects else dialects[0]
 
@@ -147,33 +149,20 @@ def main():
                     if btn_start_stop.collidepoint(mouse_pos):
                         is_active = not is_active
                         frame_buffer = []
+                        record_state = "IDLE"
                         print(f"[STATUS] Kiosk processing {'STARTED' if is_active else 'STOPPED'}")
                     elif btn_record_sign.collidepoint(mouse_pos):
                         if is_active:
-                            if len(frame_buffer) > 0:
-                                print(f"[ACTION] Capturing sign... buffering {len(frame_buffer)} frames.")
-                                # Pad to N_FRAMES with zeros if shorter
-                                while len(frame_buffer) < N_FRAMES:
-                                    frame_buffer.append(np.zeros(N_KEYPOINTS))
-                                
-                                x_input = np.expand_dims(np.array(frame_buffer), axis=0)
-                                try:
-                                    pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
-                                    print(f"[PREDICT] Result: {repr(pred_word)}")
-                                    if pred_word and pred_word != "?" and pred_word != "-":
-                                        if not collected_words or collected_words[-1] != pred_word:
-                                            collected_words.append(pred_word)
-                                            print(f"Captured: {pred_word}")
-                                except Exception as e:
-                                    print(f"[PREDICT] FAILED: {e}")
-                                    import traceback; traceback.print_exc()
-                                
-                                # Clear frame buffer for next sign
+                            if record_state == "IDLE":
+                                import time
+                                record_state = "COUNTDOWN"
+                                countdown_start_time = time.time()
                                 frame_buffer = []
+                                print("[ACTION] Get Ready countdown started...")
                             else:
-                                print("[WARNING] Cannot capture sign: frame buffer is empty.")
+                                print("[WARNING] Cannot start recording: system is not IDLE.")
                         else:
-                            print("[WARNING] Cannot capture sign: kiosk is stopped.")
+                            print("[WARNING] Cannot start recording: kiosk is stopped.")
                     elif btn_translate.collidepoint(mouse_pos):
                         if collected_words:
                             print(f"[ACTION] Running translation smoothing on: {collected_words}")
@@ -192,6 +181,7 @@ def main():
                         reconstructed_sentence = ""
                         reconstructed_english = ""
                         frame_buffer = []
+                        record_state = "IDLE"
                         print("[ACTION] Session cleared.")
                     elif btn_dialect.collidepoint(mouse_pos):
                         idx = (dialects.index(current_dialect) + 1) % len(dialects)
@@ -211,15 +201,45 @@ def main():
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = holistic.process(rgb_frame)
 
-            # Extract normalized coordinates
-            keypoints = DataLoader.extract_keypoints(results)
-            frame_buffer.append(keypoints)
+            if record_state == "COUNTDOWN":
+                import time
+                elapsed = time.time() - countdown_start_time
+                remaining = 3.0 - elapsed
+                if remaining <= 0:
+                    record_state = "RECORDING"
+                    frame_buffer = []
+                    print("[ACTION] Recording started...")
+                else:
+                    # Draw countdown text on frame
+                    countdown_val = int(np.ceil(remaining))
+                    cv2.putText(frame, f"STARTING IN: {countdown_val}", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (59, 130, 246), 4, cv2.LINE_AA)
+            
+            elif record_state == "RECORDING":
+                # Extract normalized coordinates
+                keypoints = DataLoader.extract_keypoints(results)
+                frame_buffer.append(keypoints)
 
-            # Keep sliding buffer at N_FRAMES (60)
-            if len(frame_buffer) > N_FRAMES:
-                frame_buffer.pop(0)
+                # Draw recording indicator on frame
+                cv2.putText(frame, f"RECORDING ({len(frame_buffer)}/{N_FRAMES})", (140, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (239, 68, 68), 2, cv2.LINE_AA)
+                cv2.circle(frame, (100, 50), 12, (239, 68, 68), -1)
 
+                if len(frame_buffer) >= N_FRAMES:
+                    print(f"[ACTION] Recording complete. Running prediction...")
+                    x_input = np.expand_dims(np.array(frame_buffer), axis=0)
+                    try:
+                        pred_word = predict(x=x_input, dialect=current_dialect, history=collected_words)
+                        print(f"[PREDICT] Result: {repr(pred_word)}")
+                        if pred_word and pred_word != "?" and pred_word != "-":
+                            if not collected_words or collected_words[-1] != pred_word:
+                                collected_words.append(pred_word)
+                                print(f"Captured: {pred_word}")
+                    except Exception as e:
+                        print(f"[PREDICT] FAILED: {e}")
+                        import traceback; traceback.print_exc()
 
+                    # Reset to idle preview
+                    frame_buffer = []
+                    record_state = "IDLE"
 
         # Draw MediaPipe overlays onto OpenCV frame before flipping
         if is_active and results:
@@ -249,8 +269,15 @@ def main():
 
         # Status badge overlay on top left of video
         if is_active:
-            status_text = f"BUFFERING ({len(frame_buffer)}/60)"
-            status_color = (16, 185, 129) if len(frame_buffer) > 0 else (245, 158, 11)
+            if record_state == "IDLE":
+                status_text = "READY"
+                status_color = (16, 185, 129) # Green
+            elif record_state == "COUNTDOWN":
+                status_text = "GET READY"
+                status_color = (59, 130, 246) # Blue
+            elif record_state == "RECORDING":
+                status_text = f"RECORDING ({len(frame_buffer)}/60)"
+                status_color = (239, 68, 68) # Red
         else:
             status_text = "INACTIVE"
             status_color = (100, 116, 139) # slate-500 grey
