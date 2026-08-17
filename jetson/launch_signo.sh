@@ -9,7 +9,7 @@ echo "=========================================================="
 # 1. Ensure GPU-accelerated Ollama on port 11435 is running
 if ! curl -s http://127.0.0.1:11435/api/tags > /dev/null; then
     echo "📦 Starting GPU Ollama on port 11435..."
-    /home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language/tests/start_ollama_cpu.sh
+    /home/jetson/Sign-to-Text-Translation-System-Using-Arabic-Sign-Language/jetson/start_ollama_cpu.sh
 else
     echo "✅ GPU Ollama is already running on port 11435."
 fi
