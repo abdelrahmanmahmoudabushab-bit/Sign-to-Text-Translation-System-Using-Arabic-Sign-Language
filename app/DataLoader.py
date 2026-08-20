@@ -194,11 +194,12 @@ class DataLoader:
         return np.array(results_list)
 
     @staticmethod
-    def load_inference_data(path: str) -> Optional[np.ndarray]:
+    def load_inference_data(path: str, flip_horizontal: bool = False) -> Optional[np.ndarray]:
         """Load keypoints from a video file for inference.
 
         Args:
             path: Path to the video file (e.g., .webm).
+            flip_horizontal: Whether to mirror flip frames (default False).
 
         Returns:
             numpy array of shape (1, N_FRAMES, N_KEYPOINTS), or None on failure.
@@ -221,7 +222,8 @@ class DataLoader:
                     break
 
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                image = cv2.flip(image, 1)
+                if flip_horizontal:
+                    image = cv2.flip(image, 1)
 
                 if image.shape[-1] == 1:
                     image = np.repeat(image, 3, axis=-1)
