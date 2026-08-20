@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import queue
+import threading
 import warnings
 from typing import Optional
 
@@ -12,6 +14,44 @@ from PIL import Image
 warnings.filterwarnings("ignore", category=UserWarning, module="mediapipe")
 
 logger = logging.getLogger(__name__)
+
+# ─── 20x SWE MediaPipe Holistic Graph Instance Pool ──────────────────────────
+class HolisticPool:
+    """Thread-safe pool of stateful MediaPipe Holistic instances to eliminate setup latency."""
+    def __init__(self, max_size=3):
+        self.pool = queue.Queue()
+        self.max_size = max_size
+        self.current_size = 0
+        self.lock = threading.Lock()
+
+    def acquire(self) -> mp.solutions.holistic.Holistic:
+        if self.pool.empty() and self.current_size < self.max_size:
+            with self.lock:
+                if self.pool.empty() and self.current_size < self.max_size:
+                    logger.info("Initializing new MediaPipe Holistic instance for pool (Instance #%d)...", self.current_size + 1)
+                    instance = mp.solutions.holistic.Holistic(
+                        min_detection_confidence=0.5,
+                        min_tracking_confidence=0.5
+                    )
+                    self.current_size += 1
+                    return instance
+
+        logger.debug("Acquiring MediaPipe Holistic instance from pool...")
+        return self.pool.get()
+
+    def release(self, instance: mp.solutions.holistic.Holistic):
+        self.pool.put(instance)
+
+_HOLISTIC_POOL = None
+_POOL_LOCK = threading.Lock()
+
+def get_holistic_pool() -> HolisticPool:
+    global _HOLISTIC_POOL
+    if _HOLISTIC_POOL is None:
+        with _POOL_LOCK:
+            if _HOLISTIC_POOL is None:
+                _HOLISTIC_POOL = HolisticPool(max_size=3)
+    return _HOLISTIC_POOL
 
 N_FRAMES = 60   # N Frames Per Prediction
 N_KEYPOINTS = 225  # N Keypoints captured by mediapipe (33*3 + 21*3 + 21*3)
@@ -122,9 +162,9 @@ class DataLoader:
         """
         results_list = []
 
-        with DataLoader.mp_holistic.Holistic(
-            min_detection_confidence=0.5, min_tracking_confidence=0.5
-        ) as holistic:
+        pool = get_holistic_pool()
+        holistic = pool.acquire()
+        try:
             for filename in sorted(os.listdir(frames_dir)):
                 if filename.endswith('.jpg') or filename.endswith('.png'):
                     image_path = os.path.join(frames_dir, filename)
@@ -136,6 +176,8 @@ class DataLoader:
                     results = holistic.process(image)
                     results_extracted = DataLoader.extract_keypoints(results)
                     results_list.append(results_extracted)
+        finally:
+            pool.release(holistic)
 
         # Truncate if over N_FRAMES (previously silently dropped the entire sequence)
         if len(results_list) > N_FRAMES:
@@ -169,9 +211,9 @@ class DataLoader:
 
         results_list = []
 
-        with DataLoader.mp_holistic.Holistic(
-            min_detection_confidence=0.5, min_tracking_confidence=0.5
-        ) as holistic:
+        pool = get_holistic_pool()
+        holistic = pool.acquire()
+        try:
             while len(results_list) < N_FRAMES:
                 ret, image = cap.read()
                 if not ret:
@@ -187,6 +229,8 @@ class DataLoader:
                 results = holistic.process(image)
                 results_extracted = DataLoader.extract_keypoints(results)
                 results_list.append(results_extracted)
+        finally:
+            pool.release(holistic)
 
         cap.release()
 

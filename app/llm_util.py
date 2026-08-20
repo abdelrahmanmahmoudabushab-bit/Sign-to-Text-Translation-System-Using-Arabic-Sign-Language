@@ -19,12 +19,73 @@ TRANSLATOR_MODEL = os.environ.get("TRANSLATOR_MODEL", "llama3.2:3b") # Grammar R
 logger = logging.getLogger(__name__)
 
 # ─── 20x SWE Cache & Async Management ─────────────────────────────────────────
+import queue
+
+class BackgroundCacheSaver:
+    """Thread-safe, non-blocking, coalesced disk cache writer daemon."""
+    def __init__(self, filename_resolver, cache_dict_ref, lock):
+        self.filename_resolver = filename_resolver
+        self.cache_dict_ref = cache_dict_ref
+        self.lock = lock
+        self.queue = queue.Queue(maxsize=1)
+        self.worker_thread = None
+        self.active = False
+
+    def start(self):
+        if self.worker_thread and self.worker_thread.is_alive():
+            return
+        self.active = True
+        self.worker_thread = threading.Thread(target=self._run, daemon=True)
+        self.worker_thread.start()
+
+    def trigger_save(self):
+        self.start()
+        try:
+            self.queue.put_nowait(True)
+        except queue.Full:
+            pass
+
+    def _run(self):
+        while self.active:
+            try:
+                self.queue.get(timeout=2.0)
+            except queue.Empty:
+                continue
+            
+            while not self.queue.empty():
+                try:
+                    self.queue.get_nowait()
+                except queue.Empty:
+                    break
+
+            try:
+                cache_file = self.filename_resolver()
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with self.lock:
+                    snapshot = dict(self.cache_dict_ref)
+                
+                fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(cache_file), suffix='.tmp')
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+                    os.replace(tmp_path, cache_file)
+                except Exception:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            except Exception as e:
+                logger.warning("Failed to save cache in background: %s", e)
+
+
 _TRANSLATION_CACHE = {}
 _CACHE_LOCK = threading.Lock()
+_TRANSLATION_CACHE_SAVER = None
 _cache_loaded = False
 
 def _init_cache():
-    global _TRANSLATION_CACHE, _cache_loaded
+    global _TRANSLATION_CACHE, _cache_loaded, _TRANSLATION_CACHE_SAVER
     if _cache_loaded:
         return
     with _CACHE_LOCK:
@@ -38,27 +99,18 @@ def _init_cache():
                 logger.info("⚡ Loaded %d translations from persistent cache", len(_TRANSLATION_CACHE))
             except Exception as e:
                 logger.warning("Failed to load translation cache: %s", e)
+        
+        _TRANSLATION_CACHE_SAVER = BackgroundCacheSaver(
+            filename_resolver=lambda: os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "translation_cache.json"),
+            cache_dict_ref=_TRANSLATION_CACHE,
+            lock=_CACHE_LOCK
+        )
+        _TRANSLATION_CACHE_SAVER.start()
         _cache_loaded = True
 
 def _save_cache():
-    cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "translation_cache.json")
-    try:
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        with _CACHE_LOCK:
-            cache_snapshot = dict(_TRANSLATION_CACHE)
-        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(cache_file), suffix='.tmp')
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(cache_snapshot, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, cache_file)
-        except Exception:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
-    except Exception as e:
-        logger.warning("Failed to save translation cache: %s", e)
+    if _TRANSLATION_CACHE_SAVER:
+        _TRANSLATION_CACHE_SAVER.trigger_save()
 
 def rule_based_fallback(words_list, dialect):
     """Zero-LLM fallback: maps top candidates to a basic grammatical structure."""

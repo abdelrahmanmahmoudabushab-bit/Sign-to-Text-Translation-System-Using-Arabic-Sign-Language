@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import queue
 import tempfile
 import threading
 import time
@@ -18,6 +19,64 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# ─── 20x SWE Background Asynchronous Cache Saver ─────────────────────────────
+class BackgroundCacheSaver:
+    """Thread-safe, non-blocking, coalesced disk cache writer daemon."""
+    def __init__(self, filename_resolver, cache_dict_ref, lock):
+        self.filename_resolver = filename_resolver
+        self.cache_dict_ref = cache_dict_ref
+        self.lock = lock
+        self.queue = queue.Queue(maxsize=1)
+        self.worker_thread = None
+        self.active = False
+
+    def start(self):
+        if self.worker_thread and self.worker_thread.is_alive():
+            return
+        self.active = True
+        self.worker_thread = threading.Thread(target=self._run, daemon=True)
+        self.worker_thread.start()
+
+    def trigger_save(self):
+        self.start()
+        try:
+            self.queue.put_nowait(True)
+        except queue.Full:
+            pass
+
+    def _run(self):
+        while self.active:
+            try:
+                self.queue.get(timeout=2.0)
+            except queue.Empty:
+                continue
+            
+            while not self.queue.empty():
+                try:
+                    self.queue.get_nowait()
+                except queue.Empty:
+                    break
+
+            try:
+                cache_file = self.filename_resolver()
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with self.lock:
+                    snapshot = dict(self.cache_dict_ref)
+                
+                fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(cache_file), suffix='.tmp')
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+                    os.replace(tmp_path, cache_file)
+                except Exception:
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            except Exception as e:
+                logger.warning("Failed to save cache in background: %s", e)
+
 # ─── Lazy-loaded globals ─────────────────────────────────────────────────────
 _model = None
 _idx_to_arabic: Dict[int, str] = {}
@@ -25,6 +84,10 @@ _norm_mean: Optional[np.ndarray] = None
 _norm_std: Optional[np.ndarray] = None
 _initialized = False
 _PREDICTION_CACHE: Dict[str, list] = {}
+_PREDICTION_CACHE_SAVER: Optional[BackgroundCacheSaver] = None
+_jsl_embedder = None
+_jsl_database = None
+_jsl_labels = []
 _INIT_LOCK = threading.Lock()
 _CACHE_LOCK = threading.Lock()
 
@@ -44,8 +107,8 @@ def _get_cache_candidates():
 
 
 def _init():
-    """Lazy initialization: load model, label mapping, and normalization stats on first use."""
-    global _model, _idx_to_arabic, _norm_mean, _norm_std, _initialized
+    """Lazy initialization: load model, label mapping, normalization stats, and JSL metric DB on first use."""
+    global _model, _idx_to_arabic, _norm_mean, _norm_std, _initialized, _jsl_embedder, _jsl_database, _jsl_labels
     if _initialized:
         return
     with _INIT_LOCK:
@@ -78,6 +141,16 @@ def _init():
 
         if _model is None and os.path.exists(keras_path):
             import tensorflow as tf
+            # Configure VRAM memory growth on Jetson/GPU to prevent OOM conflicts with Ollama
+            try:
+                gpus = tf.config.list_physical_devices('GPU')
+                if gpus:
+                    for gpu in gpus:
+                        tf.config.experimental.set_memory_growth(gpu, True)
+                    logger.info("⚡ TensorFlow GPU Memory Growth configured successfully.")
+            except Exception as vram_err:
+                logger.warning("Could not set TensorFlow GPU memory growth: %s", vram_err)
+
             # Patch NVIDIA Jetson TensorFlow internal namespace for Keras 2 compatibility
             for target in (getattr(tf, "__internal__", None), getattr(getattr(tf, "compat", None), "v2", None) and getattr(tf.compat.v2, "__internal__", None)):
                 if target and not hasattr(target, "register_load_context_function"):
@@ -132,37 +205,72 @@ def _init():
             except Exception as e:
                 logger.warning("Failed to load prediction disk cache: %s", e)
 
+        global _PREDICTION_CACHE_SAVER
+        _PREDICTION_CACHE_SAVER = BackgroundCacheSaver(
+            filename_resolver=lambda: os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json"),
+            cache_dict_ref=_PREDICTION_CACHE,
+            lock=_CACHE_LOCK
+        )
+        _PREDICTION_CACHE_SAVER.start()
+
+        # 5. Load JSL Vector database & Embedder if files exist
+        jsl_embedder_path = os.path.join(os.path.dirname(__file__), "jsl_embedder.keras")
+        jsl_db_path = os.path.join(os.path.dirname(__file__), "jsl_database.npy")
+        jsl_manifest_path = os.path.normpath(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "datasets", "jsl_manifest.json"
+        ))
+        
+        if os.path.exists(jsl_embedder_path) and os.path.exists(jsl_db_path):
+            try:
+                import tensorflow as tf
+                # Configure VRAM memory growth for JSL embedder
+                try:
+                    gpus = tf.config.list_physical_devices('GPU')
+                    if gpus:
+                        for gpu in gpus:
+                            tf.config.experimental.set_memory_growth(gpu, True)
+                except Exception:
+                    pass
+                _jsl_embedder = tf.keras.models.load_model(jsl_embedder_path, compile=False, safe_mode=False)
+                _jsl_database = np.load(jsl_db_path)
+                
+                # Load labels manifest
+                if os.path.exists(jsl_manifest_path):
+                    with open(jsl_manifest_path, 'r', encoding='utf-8') as jf:
+                        manifest_data = json.load(jf)
+                        _jsl_labels = [item.get("glossText", "?") for item in manifest_data]
+                logger.info("⚡ JSL Metric Database loaded: %d items", len(_jsl_database))
+            except Exception as jsl_err:
+                logger.warning("Failed to load JSL database/embedder: %s", jsl_err)
+
         _initialized = True
 
 
 def _save_prediction_cache():
-    """Persist prediction cache to disk atomically (write to temp, then rename)."""
-    cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media", "prediction_cache.json")
-    try:
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-        with _CACHE_LOCK:
-            cache_snapshot = dict(_PREDICTION_CACHE)
-        # Write to temp file first, then atomically replace
-        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(cache_file), suffix='.tmp')
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(cache_snapshot, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, cache_file)
-        except Exception:
-            # Clean up temp file on failure
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
-    except Exception as e:
-        logger.warning("Failed to save prediction disk cache: %s", e)
+    """Trigger background non-blocking persistence of the prediction cache."""
+    if _PREDICTION_CACHE_SAVER:
+        _PREDICTION_CACHE_SAVER.trigger_save()
+
+
+def _smooth_sequence(x: np.ndarray, alpha: float = 0.6) -> np.ndarray:
+    """Applies temporal Exponential Moving Average (EMA) to coordinate sequences.
+    
+    Args:
+        x: Input array of shape (1, N_FRAMES, N_KEYPOINTS)
+        alpha: Smoothing factor (0.0 < alpha <= 1.0). Higher means less smoothing.
+    """
+    smoothed = np.zeros_like(x)
+    smoothed[0, 0] = x[0, 0]
+    for t in range(1, x.shape[1]):
+        smoothed[0, t] = alpha * x[0, t] + (1 - alpha) * smoothed[0, t - 1]
+    return smoothed
 
 
 def _predict_coordinates(
     x: np.ndarray, 
     video_path: str = None, 
-    dialect: str = 'Saudi Arabic Sign Language', 
+    dialect: str = 'Jordanian Arabic Sign Language', 
     start_t: float = None
 ) -> dict:
     """Core coordinate-based CNN-LSTM prediction logic."""
@@ -170,6 +278,9 @@ def _predict_coordinates(
     
     if start_t is None:
         start_t = time.time()
+        
+    # Apply EMA temporal coordinate smoothing to dampen micro-jitters
+    x = _smooth_sequence(x, alpha=0.6)
         
     # 0. Motion / Rest Gating Filter — eliminate false positive hallucinations during static rest
     hand_keypoints = x[0, :, 99:225]
@@ -194,8 +305,8 @@ def _predict_coordinates(
     # Pipeline LRU Memory Cache Lookup (0.1ms repeat lookup)
     global _PREDICTION_CACHE
 
-    # Discretize array to 3 decimal places to create robust spatial hash key
-    keypoint_hash = hashlib.sha256(np.round(x, decimals=3).tobytes()).hexdigest()
+    # Discretize array to 3 decimal places and include dialect to create robust spatial hash key
+    keypoint_hash = hashlib.sha256(f"{dialect}_".encode('utf-8') + np.round(x, decimals=3).tobytes()).hexdigest()
     with _CACHE_LOCK:
         cached = _PREDICTION_CACHE.get(keypoint_hash)
     if cached is not None:
@@ -222,6 +333,38 @@ def _predict_coordinates(
             "keypoint_hash": keypoint_hash,
             "is_rest": False
         }
+
+    # Check if target dialect requires JSL nearest-neighbor lookup
+    if "Jordanian" in dialect and _jsl_embedder is not None and _jsl_database is not None:
+        try:
+            # 1. Generate 128-D embedding using embedder network
+            x_emb = _jsl_embedder.predict(x.astype(np.float32))
+            
+            # 2. Compute cosine similarity against database (since vectors are L2-norm, cosine similarity is dot product)
+            similarities = np.dot(_jsl_database, x_emb[0])
+            
+            # 3. Get top 5 matches
+            top_indices = np.argsort(similarities)[-5:][::-1]
+            top_similarities = similarities[top_indices]
+            
+            candidates = [_jsl_labels[idx] if idx < len(_jsl_labels) else "?" for idx in top_indices]
+            candidate_confidences = [float((sim + 1.0) / 2.0) for sim in top_similarities]
+            
+            pred_word = candidates[0]
+            lstm_confidence = candidate_confidences[0]
+            logger.info("⚡ JSL Embedding Search complete. Best Match: '%s' (similarity: %.4f)", pred_word, top_similarities[0])
+            
+            return {
+                "pred_lstm": pred_word,
+                "lstm_confidence": lstm_confidence,
+                "candidates": candidates,
+                "candidate_confidences": candidate_confidences,
+                "is_cache_hit": False,
+                "keypoint_hash": keypoint_hash,
+                "is_rest": False
+            }
+        except Exception as e:
+            logger.error("JSL Embedding Search failed: %s. Falling back to standard classifier.", e)
 
     # Run inference through TensorRT, ONNX Runtime, or Keras
     mtype = _model.get("type", "keras")
@@ -405,7 +548,7 @@ def _arbitrate_prediction(
     return final_pred
 
 
-def predict(x: np.ndarray = None, video_path: str = None, history: list = None, dialect: str = 'Saudi Arabic Sign Language', base64_frames: list = None) -> str:
+def predict(x: np.ndarray = None, video_path: str = None, history: list = None, dialect: str = 'Jordanian Arabic Sign Language', base64_frames: list = None) -> str:
     """Run model prediction on preprocessed keypoint data or raw video, and return Arabic label."""
     start_t = time.time()
     _init()
@@ -492,7 +635,7 @@ def predict(x: np.ndarray = None, video_path: str = None, history: list = None, 
     )
 
 
-def predict_candidates(x: np.ndarray, dialect: str = 'Saudi Arabic Sign Language') -> list:
+def predict_candidates(x: np.ndarray, dialect: str = 'Jordanian Arabic Sign Language') -> list:
     """Predicts Arabic Sign Language gesture and returns top 3 candidate labels."""
     _init()
     if _model is None:
@@ -518,6 +661,44 @@ def main():
     print(x.shape)
     result = predict(x)
     print(result)
+
+
+# Proactive model preloading and warming up background thread
+def _preload_and_warmup_model():
+    try:
+        # Avoid running during management commands
+        import sys
+        is_management = len(sys.argv) > 1 and sys.argv[1] in ('migrate', 'collectstatic', 'makemigrations', 'shell', 'test', 'check')
+        if is_management:
+            return
+        
+        # Load the models
+        _init()
+        
+        # Warmup if model loaded successfully
+        global _model
+        if _model is not None:
+            # CNN-LSTM expects (1, 60, 225) shape
+            dummy_input = np.zeros((1, 60, 225), dtype=np.float32)
+            mtype = _model.get("type", "keras")
+            if mtype == "onnx":
+                session = _model["session"]
+                input_name = session.get_inputs()[0].name
+                session.run(None, {input_name: dummy_input})
+            elif mtype == "tensorrt":
+                runner = _model["runner"]
+                runner.predict(dummy_input)
+            elif mtype == "keras":
+                _model["model"].predict(dummy_input)
+            logger.info("⚡ Model warmup completed successfully with dummy inference.")
+    except Exception as e:
+        logger.warning("Failed to preload/warmup model in background: %s", e)
+
+# Start preloading thread during server runtime
+import sys
+_is_management_cmd = len(sys.argv) > 1 and sys.argv[1] in ('migrate', 'collectstatic', 'makemigrations', 'shell', 'test', 'check')
+if not _is_management_cmd and (os.environ.get('RUN_MAIN') == 'true' or os.environ.get('DJANGO_DEBUG', 'True').lower() == 'false'):
+    threading.Thread(target=_preload_and_warmup_model, daemon=True).start()
 
 
 if __name__ == "__main__":
