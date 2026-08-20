@@ -214,6 +214,7 @@ def _init():
         _PREDICTION_CACHE_SAVER.start()
 
         # 5. Load JSL Vector database & Embedder if files exist
+        jsl_onnx_path = os.path.join(os.path.dirname(__file__), "jsl_embedder.onnx")
         jsl_embedder_path = os.path.join(os.path.dirname(__file__), "jsl_embedder.keras")
         jsl_db_path = os.path.join(os.path.dirname(__file__), "jsl_database.npy")
         jsl_manifest_path = os.path.normpath(os.path.join(
@@ -221,19 +222,27 @@ def _init():
             "datasets", "jsl_manifest.json"
         ))
         
-        if os.path.exists(jsl_embedder_path) and os.path.exists(jsl_db_path):
+        if os.path.exists(jsl_db_path) and (os.path.exists(jsl_onnx_path) or os.path.exists(jsl_embedder_path)):
             try:
-                import tensorflow as tf
-                # Configure VRAM memory growth for JSL embedder
-                try:
-                    gpus = tf.config.list_physical_devices('GPU')
-                    if gpus:
-                        for gpu in gpus:
-                            tf.config.experimental.set_memory_growth(gpu, True)
-                except Exception:
-                    pass
-                _jsl_embedder = tf.keras.models.load_model(jsl_embedder_path, compile=False, safe_mode=False)
                 _jsl_database = np.load(jsl_db_path)
+                
+                if os.path.exists(jsl_onnx_path):
+                    import onnxruntime as ort
+                    providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                    _jsl_embedder = {"type": "onnx", "session": ort.InferenceSession(jsl_onnx_path, providers=providers)}
+                    logger.info("⚡ ONNX JSL Embedder loaded from %s", jsl_onnx_path)
+                elif os.path.exists(jsl_embedder_path):
+                    import tensorflow as tf
+                    try:
+                        gpus = tf.config.list_physical_devices('GPU')
+                        if gpus:
+                            for gpu in gpus:
+                                tf.config.experimental.set_memory_growth(gpu, True)
+                    except Exception:
+                        pass
+                    model_obj = tf.keras.models.load_model(jsl_embedder_path, compile=False, safe_mode=False)
+                    _jsl_embedder = {"type": "keras", "model": model_obj}
+                    logger.info("⚡ Keras JSL Embedder loaded from %s", jsl_embedder_path)
                 
                 # Load labels manifest
                 if os.path.exists(jsl_manifest_path):
@@ -265,6 +274,21 @@ def _smooth_sequence(x: np.ndarray, alpha: float = 0.6) -> np.ndarray:
     for t in range(1, x.shape[1]):
         smoothed[0, t] = alpha * x[0, t] + (1 - alpha) * smoothed[0, t - 1]
     return smoothed
+
+
+def _run_jsl_embedder(x: np.ndarray) -> np.ndarray:
+    """Executes JSL embedder model via ONNX Runtime or Keras."""
+    if isinstance(_jsl_embedder, dict):
+        mtype = _jsl_embedder.get("type")
+        if mtype == "onnx":
+            sess = _jsl_embedder["session"]
+            input_name = sess.get_inputs()[0].name
+            return sess.run(None, {input_name: x.astype(np.float32)})[0]
+        elif mtype == "keras":
+            return _jsl_embedder["model"].predict(x.astype(np.float32), verbose=0)
+    elif _jsl_embedder is not None:
+        return _jsl_embedder.predict(x.astype(np.float32), verbose=0)
+    return np.zeros((x.shape[0], 128), dtype=np.float32)
 
 
 def _predict_coordinates(
@@ -340,14 +364,14 @@ def _predict_coordinates(
             from app.DataLoader import DataLoader
             
             # 1. Evaluate standard input orientation
-            x_emb_std = _jsl_embedder.predict(x.astype(np.float32), verbose=0)
+            x_emb_std = _run_jsl_embedder(x)
             sim_std = np.dot(_jsl_database, x_emb_std[0])
             best_idx_std = np.argmax(sim_std)
             best_score_std = sim_std[best_idx_std]
             
             # 2. Evaluate hand-swapped & X-inverted orientation (for left-handed or mirrored camera feeds)
             x_inv = DataLoader.swap_hands_and_invert_x(x)
-            x_emb_inv = _jsl_embedder.predict(x_inv.astype(np.float32), verbose=0)
+            x_emb_inv = _run_jsl_embedder(x_inv)
             sim_inv = np.dot(_jsl_database, x_emb_inv[0])
             best_idx_inv = np.argmax(sim_inv)
             best_score_inv = sim_inv[best_idx_inv]
