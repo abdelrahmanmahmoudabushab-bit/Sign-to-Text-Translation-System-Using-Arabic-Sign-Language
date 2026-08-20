@@ -127,6 +127,39 @@ class DataLoader:
         return np.concatenate((pose_adjusted, lh_adjusted, rh_adjusted))
 
     @staticmethod
+    def swap_hands_and_invert_x(keypoints: np.ndarray) -> np.ndarray:
+        """
+        Inverts keypoint array (shape 1x60x225 or 60x225 or 225):
+        1. Swaps Left Hand (indices 99..161) and Right Hand (indices 162..224) features.
+        2. Negates X-coordinates (indices 0::3) for horizontal spatial symmetry.
+        """
+        arr = keypoints.copy()
+        is_3d = (arr.ndim == 3)
+        if is_3d:
+            batch, frames, kps = arr.shape
+            arr_reshaped = arr.reshape(-1, kps)
+        elif arr.ndim == 2:
+            arr_reshaped = arr
+        else:
+            arr_reshaped = arr.reshape(1, -1)
+
+        # 1. Flip X coordinates (every 3rd index starting at 0)
+        arr_reshaped[:, 0::3] = -arr_reshaped[:, 0::3]
+
+        # 2. Swap Left Hand (99:162) and Right Hand (162:225)
+        lh_part = arr_reshaped[:, 99:162].copy()
+        rh_part = arr_reshaped[:, 162:225].copy()
+        arr_reshaped[:, 99:162] = rh_part
+        arr_reshaped[:, 162:225] = lh_part
+
+        if is_3d:
+            return arr_reshaped.reshape(batch, frames, kps)
+        elif keypoints.ndim == 2:
+            return arr_reshaped
+        else:
+            return arr_reshaped.reshape(-1)
+
+    @staticmethod
     def draw_styled_landmarks(image: np.ndarray, results) -> None:
         """Draw MediaPipe landmarks on an image for visualization."""
         DataLoader.mp_drawing.draw_landmarks(

@@ -337,13 +337,29 @@ def _predict_coordinates(
     # Check if target dialect requires JSL nearest-neighbor lookup
     if "Jordanian" in dialect and _jsl_embedder is not None and _jsl_database is not None:
         try:
-            # 1. Generate 128-D embedding using embedder network
-            x_emb = _jsl_embedder.predict(x.astype(np.float32))
+            from app.DataLoader import DataLoader
             
-            # 2. Compute cosine similarity against database (since vectors are L2-norm, cosine similarity is dot product)
-            similarities = np.dot(_jsl_database, x_emb[0])
+            # 1. Evaluate standard input orientation
+            x_emb_std = _jsl_embedder.predict(x.astype(np.float32), verbose=0)
+            sim_std = np.dot(_jsl_database, x_emb_std[0])
+            best_idx_std = np.argmax(sim_std)
+            best_score_std = sim_std[best_idx_std]
             
-            # 3. Get top 5 matches
+            # 2. Evaluate hand-swapped & X-inverted orientation (for left-handed or mirrored camera feeds)
+            x_inv = DataLoader.swap_hands_and_invert_x(x)
+            x_emb_inv = _jsl_embedder.predict(x_inv.astype(np.float32), verbose=0)
+            sim_inv = np.dot(_jsl_database, x_emb_inv[0])
+            best_idx_inv = np.argmax(sim_inv)
+            best_score_inv = sim_inv[best_idx_inv]
+            
+            # Pick the higher confidence orientation automatically
+            if best_score_inv > best_score_std:
+                logger.info("⚡ Inversion Correction active (hand-swap/mirror match score %.4f > %.4f)", best_score_inv, best_score_std)
+                similarities = sim_inv
+            else:
+                similarities = sim_std
+
+            # 3. Extract top 5 candidate matches
             top_indices = np.argsort(similarities)[-5:][::-1]
             top_similarities = similarities[top_indices]
             
