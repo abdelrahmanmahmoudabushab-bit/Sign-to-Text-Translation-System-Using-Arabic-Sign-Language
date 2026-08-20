@@ -113,15 +113,34 @@ def _save_cache():
         _TRANSLATION_CACHE_SAVER.trigger_save()
 
 def rule_based_fallback(words_list, dialect):
-    """Zero-LLM fallback: maps top candidates to a basic grammatical structure."""
+    """Zero-LLM fallback: maps top candidates to a natural grammatical structure in Jordanian Arabic."""
     if isinstance(words_list[0], list):
         words = [opts[0] for opts in words_list]
     else:
         words = words_list
     # Remove annotations like (negation) for readable output
     clean_words = [re.sub(r'\s*\([^)]*\)', '', w) for w in words]
-    arabic = " ".join(clean_words)
-    english = f"[Offline Fallback] {' '.join(words)}"
+    
+    # Apply specialized Jordanian colloquial grammar transformations
+    jordanian_map = {
+        "أريد": "بدي",
+        "يريد": "بدي",
+        "تريد": "بدك",
+        "هنا": "هون",
+        "الآن": "هسا",
+        "ذهاب": "أروح",
+        "كيف حالك": "كيفك",
+        "شكرا": "يسلمو",
+        "نعم": "آه",
+        "لا": "لأ"
+    }
+    
+    transformed = []
+    for w in clean_words:
+        transformed.append(jordanian_map.get(w, w))
+        
+    arabic = " ".join(transformed)
+    english = f"[' '.join(clean_words)]"
     return {
         "arabic": arabic,
         "english": english
